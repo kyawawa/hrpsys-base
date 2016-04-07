@@ -115,7 +115,7 @@ bool robot::loadGain()
 
 void robot::startInertiaSensorCalibration()
 {
-    if (numSensors(Sensor::ACCELERATION)==0 
+    if (numSensors(Sensor::ACCELERATION)==0
         && numSensors(Sensor::RATE_GYRO)==0)  return;
 
     if (isBusy()) return;
@@ -182,7 +182,7 @@ void robot::calibrateInertiaSensorOneStep()
             for (int i=0; i<3; i++)
                 gyro_sum[j][i] += rate[i];
         }
-        
+
         for (int j=0; j<numSensors(Sensor::ACCELERATION); j++){
             double acc[3];
             read_accelerometer(j, acc);

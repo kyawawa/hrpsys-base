@@ -362,6 +362,21 @@ class HrpsysConfigurator:
         if rtm.findPort(self.rh.ref, "lfsensor") and rtm.findPort(
                                      self.rh.ref, "rfsensor") and self.st:
             connectPorts(self.kf.port("rpy"), self.st.port("rpy"))
+            #added by karasawa for chidori
+            connectPorts(self.kf.port("vel"), self.st.port("vel"))
+            connectPorts(self.kf.port("angvel"), self.st.port("angvel"))
+            connectPorts(self.kf.port("rpy"), self.seq.port("rpy"))
+            connectPorts(self.st.port("emergency_step_flag"), self.kf.port("emergency_step_flag"))
+            connectPorts(self.st.port("emergency_step_flag"), self.seq.port("emergency_step_flag"))
+            connectPorts(self.st.port("debug_show"), self.seq.port("debug_show"))
+            connectPorts(self.kf.port("acc_output"), self.st.port("acc"))
+            connectPorts(self.rh.port("rfsensor"), self.st.port("rfsensor_log"))
+            connectPorts(self.rh.port("lfsensor"), self.st.port("lfsensor_log"))
+            connectPorts(self.st.port("pgain"), self.seq.port("pgain_in"))
+            connectPorts(self.seq.port("pgain_out"), self.rh.port("seqpgain"))
+            connectPorts(self.st.port("target_speed"), self.seq.port("target_speed"))
+            connectPorts(self.rh.port("q"), self.seq.port("qCurrent"))
+
             connectPorts(self.sh.port("zmpOut"), self.abc.port("zmpIn"))
             connectPorts(self.sh.port("basePosOut"), self.abc.port("basePosIn"))
             connectPorts(self.sh.port("baseRpyOut"), self.abc.port("baseRpyIn"))

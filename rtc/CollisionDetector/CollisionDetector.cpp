@@ -69,7 +69,11 @@ CollisionDetector::CollisionDetector(RTC::Manager* manager)
       m_window(&m_scene, &m_log),
 #endif // USE_HRPSYSUTIL
       m_debugLevel(0),
+#ifdef CALC_VEL_N_ANGVEL
+      m_enable(false),
+#else
       m_enable(true),
+#endif
       collision_beep_count(0),
       dummy(0)
 {
@@ -321,12 +325,32 @@ RTC::ReturnCode_t CollisionDetector::onExecute(RTC::UniqueId ec_id)
 {
     static int loop = 0;
     loop++;
+
+#ifdef CALC_VEL_N_ANGVEL
+    if((loop == 6000) && (!m_enable)) {
+        std::cerr << "\x1b[31m" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << std::endl;
+        std::cerr << "      CAUTION!! collision detector's initial state is OFF"                                << std::endl;
+        std::cerr << "      If you want to turn on CO. Please send enableCollisionDetection to CO RTC"          << std::endl;
+        std::cerr << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        std::cerr << "\x1b[0m" << std::endl;
+    }
+#endif
+
     if (m_servoStateIn.isNew()) {
         m_servoStateIn.read();
     }
     if ( ! m_enable ) {
         if ( DEBUGP || loop % 100 == 1) {
-            std::cerr << "CAUTION!! The robot is moving without checking self collision detection!!! please send enableCollisionDetection to CollisoinDetection RTC" << std::endl;
+            //std::cerr << "CAUTION!! The robot is moving without checking self collision detection!!! please send enableCollisionDetection to CollisoinDetection RTC" << std::endl;
         }
         if ( m_qRefIn.isNew()) {
             m_qRefIn.read();

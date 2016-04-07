@@ -49,6 +49,13 @@ KalmanFilter::KalmanFilter(RTC::Manager* manager)
     m_rpyRawOut("rpy_raw", m_rpyRaw),
     m_baseRpyCurrentOut("baseRpyCurrent", m_baseRpyCurrent),
     m_KalmanFilterServicePort("KalmanFilterService"),
+#ifdef CALC_VEL_N_ANGVEL
+    //added by karasawa for chidori
+    m_velOut("vel", m_vel),
+    m_angvelOut("angvel", m_angvel),
+    m_accOut("acc_output", m_acc_output),
+    m_emergency_step_flagIn("emergency_step_flag", m_emergency_step_flag),
+#endif
     // </rtc-template>
     m_robot(hrp::BodyPtr()),
     m_debugLevel(0),
@@ -71,6 +78,7 @@ RTC::ReturnCode_t KalmanFilter::onInitialize()
   // Bind variables and configuration variable
   bindParameter("debugLevel", m_debugLevel, "0");
   
+  
   // </rtc-template>
 
   // Registration: InPort/OutPort/Service
@@ -86,6 +94,14 @@ RTC::ReturnCode_t KalmanFilter::onInitialize()
   addOutPort("rpy", m_rpyOut);
   addOutPort("rpy_raw", m_rpyRawOut);
   addOutPort("baseRpyCurrent", m_baseRpyCurrentOut);
+#ifdef CALC_VEL_N_ANGVEL
+  //added by karasawa for chidori
+  addOutPort("vel", m_velOut);
+  addOutPort("angvel", m_angvelOut);
+  addOutPort("acc_output", m_accOut);
+  addInPort("emergency_step_flag", m_emergency_step_flagIn);
+  m_emergency_step_flag.data = false;
+#endif
 
   // Set service provider to Ports
   m_KalmanFilterServicePort.registerProvider("service0", "KalmanFilterService", m_service0);
@@ -123,6 +139,18 @@ RTC::ReturnCode_t KalmanFilter::onInitialize()
   m_rpy.data.r = 0;
   m_rpy.data.p = 0;
   m_rpy.data.y = 0;
+#ifdef CALC_VEL_N_ANGVEL
+  //added by karasawa for chidori
+  m_vel.data.vx = 0.0;
+  m_vel.data.vy = 0.0;
+  m_vel.data.vz = 0.0;
+  m_angvel.data.avx = 0.0;
+  m_angvel.data.avy = 0.0;
+  m_angvel.data.avz = 0.0;
+  m_acc_output.data.ax = 0.0;
+  m_acc_output.data.ay = 0.0;
+  m_acc_output.data.az = 0.0;
+#endif
 
   if (m_robot->numSensors(hrp::Sensor::ACCELERATION) > 0) {
     hrp::Sensor* sensor = m_robot->sensor(hrp::Sensor::ACCELERATION, 0);
@@ -201,9 +229,14 @@ RTC::ReturnCode_t KalmanFilter::onExecute(RTC::UniqueId ec_id)
   }
   double sx_ref = 0.0, sy_ref = 0.0, sz_ref = 0.0;
   if (m_accRefIn.isNew()){
-    m_accRefIn.read();
-    sx_ref = m_accRef.data.ax, sy_ref = m_accRef.data.ay, sz_ref = m_accRef.data.az;
+      m_accRefIn.read();
+      sx_ref = m_accRef.data.ax, sy_ref = m_accRef.data.ay, sz_ref = m_accRef.data.az;
   }
+#ifdef CALC_VEL_N_ANGVEL
+  if (m_emergency_step_flagIn.isNew()) {
+      m_emergency_step_flagIn.read();
+  }
+#endif
   if (m_accIn.isNew()){
     m_accIn.read();
 
@@ -231,6 +264,59 @@ RTC::ReturnCode_t KalmanFilter::onExecute(RTC::UniqueId ec_id)
         }
         rpy_kf.main_one(rpy, rpyRaw, baseRpyCurrent, acc, gyro, sl_y, BtoS);
     }
+#ifdef CALC_VEL_N_ANGVEL
+    //calc_vel_n_angvel(vel, angvel, acc, gyro, rpy, BtoS);
+    if(m_robot->numSensors(hrp::Sensor::ACCELERATION) >0) {
+        if(m_emergency_step_flag.data == SequencePlayer::EMERGENCY) {
+           // std::cerr << "\x1b[33m" << "emergency step flag!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << "\x1b[0m" << std::endl;
+        }
+        hrp::Vector3 vel;
+        vel(0)= m_vel.data.vx;
+        vel(1)= m_vel.data.vy;
+        vel(2)= m_vel.data.vz;
+        hrp::Vector3 angvel;
+        hrp::Vector3 acc_without_g;
+        //angvel(0)= m_angvel.data.avx;
+        //angvel(1)= m_angvel.data.avy;
+        //angvel(2)= m_angvel.data.avz;
+        hrp::Sensor* sensor = m_robot->sensor(hrp::Sensor::ACCELERATION, 0);
+        rpy_kf.calc_vel_n_angvel(vel, angvel, acc_without_g,acc, gyro, rpy, sensor->localPos);
+        m_vel.data.vx = vel(0);
+        m_vel.data.vy = vel(1);
+        m_vel.data.vz = vel(2);
+        m_angvel.data.avx = angvel(0);
+        m_angvel.data.avy = angvel(1);
+        m_angvel.data.avz = angvel(2);
+        m_acc_output.data.ax = acc_without_g(0);
+        m_acc_output.data.ay = acc_without_g(1);
+        m_acc_output.data.az = acc_without_g(2);
+        /* 
+         * hrp::Vector3 testvec;
+         * testvec << 1, 0, 0;
+         * testvec = sensor->localR*testvec;
+         * std::cerr << "1 0 0  | x:" << testvec(0) << "  y:" << testvec(1) << "  z:" << testvec(2) << std::endl;
+         * testvec << 0, 1, 0;
+         * testvec = sensor->localR*testvec;
+         * std::cerr << "0 1 0  | x:" << testvec(0) << "  y:" << testvec(1) << "  z:" << testvec(2) << std::endl;
+         * testvec << 0, 0, 1;
+         * testvec = sensor->localR*testvec;
+         * std::cerr << "0 0 1  | x:" << testvec(0) << "  y:" << testvec(1) << "  z:" << testvec(2) << std::endl;
+         */
+
+    }
+    //std::cerr << "acc x:" << acc(0) << "  y:" << acc(1) << "  z:" << acc(2) << std::endl;
+
+    /* 
+     * hrp::Sensor* sensor = m_robot->sensor(hrp::Sensor::ACCELERATION, 0);
+     * hrp::Vector3 Body2Sensor_pos_relative_to_world = sensor->link->R * sensor->localPos;
+     * //std::cerr << "sensor pos  x:" << sensor->localPos(0) << "  y:" << sensor->localPos(1) << "  z:" << sensor->localPos(2) << std::endl;
+     * std::cerr << "posture::" << std::endl;
+     * std::cerr << sensor->link->R(0,0) << "  " << sensor->link->R(0,1) << "  "<< sensor->link->R(0,2) << std::endl;
+     * std::cerr << sensor->link->R(1,0) << "  " << sensor->link->R(1,1) << "  "<< sensor->link->R(1,2) << std::endl;
+     * std::cerr << sensor->link->R(2,0) << "  " << sensor->link->R(2,1) << "  "<< sensor->link->R(2,2) << std::endl;
+     * std::cerr << std::endl;
+     */
+#endif
     m_rpyRaw.data.r = rpyRaw(0);
     m_rpyRaw.data.p = rpyRaw(1);
     m_rpyRaw.data.y = rpyRaw(2);
@@ -244,10 +330,22 @@ RTC::ReturnCode_t KalmanFilter::onExecute(RTC::UniqueId ec_id)
     m_rpyRaw.tm = m_acc.tm;
     m_rpy.tm = m_acc.tm;
     m_baseRpyCurrent.tm = m_acc.tm;
+#ifdef CALC_VEL_N_ANGVEL
+    //added by karasawa for chidori
+    m_vel.tm = m_acc.tm;
+    m_angvel.tm = m_acc.tm;
+    m_acc_output.tm = m_acc.tm;
+#endif
 
     m_rpyOut.write();
     m_rpyRawOut.write();
     m_baseRpyCurrentOut.write();
+#ifdef CALC_VEL_N_ANGVEL
+    //added by karasawa for chidori
+    m_velOut.write();
+    m_angvelOut.write();
+    m_accOut.write();
+#endif
   }
   return RTC::RTC_OK;
 }

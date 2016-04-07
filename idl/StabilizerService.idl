@@ -59,6 +59,44 @@ module OpenHRP
         sequence<TwoDimensionVertex> vertices;
     };
 
+    enum EmergencyStepMode {
+        ON,
+        OFF
+    };
+
+    enum DebugShow {
+        ZERO,
+        ONE,
+        TWO,
+        THREE,
+        Four,
+        FIVE,
+        SIX,
+        SEVEN,
+        EIGHT,
+        NINE,
+        TEN,
+        ELEVEN,
+        TWELVE,
+        THIRTEEN,
+        FOURTEEN,
+        FIFTEEN,
+        SIXTEEN,
+        SEVENTEEN,
+        EIGHTEEN,
+        NINETEEN,
+        TWENTY,
+        TWENTY_ONE,
+        TWENTY_TWO,
+        TWENTY_THREE,
+        TWENTY_FOUR,
+        TWENTY_FIVE,
+        TWENTY_SIX,
+        TWENTY_SEVEN,
+        TWENTY_EIGHT,
+        TWENTY_NINE
+    };// enum tukatteru imi...
+
     /**
      * @struct stParam
      * @brief Stabilizer Parameters.
@@ -168,6 +206,13 @@ module OpenHRP
       sequence< sequence<double, 3> > foot_origin_offset;
       /// Emergency signal checking mode
       EmergencyCheckMode emergency_check_mode;
+      /// Emergency step mode
+      EmergencyStepMode emergency_step_mode;
+      /// Debug show
+      DebugShow debug_show;
+      /// control pgain
+      double pgain;
+      long target_speed;
     };
 
     /**

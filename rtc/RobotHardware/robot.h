@@ -78,6 +78,7 @@ public:
     void startForceSensorCalibration();
 
     /**
+
        \brief initialize joint angle
        \param name joint name, part name or all
        \param option options for initialization

@@ -49,6 +49,9 @@ RobotHardware::RobotHardware(RTC::Manager* manager)
     m_qRefIn("qRef", m_qRef),
     m_dqRefIn("dqRef", m_dqRef),
     m_tauRefIn("tauRef", m_tauRef),
+#ifdef CALC_VEL_N_ANGVEL
+    m_seqpgainIn("seqpgain", m_seqpgain),
+#endif
     m_qOut("q", m_q),
     m_dqOut("dq", m_dq),
     m_tauOut("tau", m_tau),
@@ -74,7 +77,9 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
   addInPort("qRef", m_qRefIn);
   addInPort("dqRef", m_dqRefIn);
   addInPort("tauRef", m_tauRefIn);
-
+#ifdef CALC_VEL_N_ANGVEL
+  addInPort("seqpgain", m_seqpgainIn);
+#endif
   addOutPort("q", m_qOut);
   addOutPort("dq", m_dqOut);
   addOutPort("tau", m_tauOut);
@@ -237,12 +242,12 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
               m_emergencySignalOut.write();
           }
       }
-  }    
+  }
 
   if (m_qRefIn.isNew()){
       m_qRefIn.read();
       //std::cout << "RobotHardware: qRef[21] = " << m_qRef.data[21] << std::endl;
-      if (!m_isDemoMode 
+      if (!m_isDemoMode
           && m_robot->checkJointCommands(m_qRef.data.get_buffer())){
           m_robot->servo("all", false);
           m_emergencySignal.data = robot::EMG_SERVO_ERROR;
@@ -264,6 +269,16 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
       // output to iob
       m_robot->writeTorqueCommands(m_tauRef.data.get_buffer());
   }
+#ifdef CALC_VEL_N_ANGVEL
+  if (m_seqpgainIn.isNew()) {
+      char joint_names[5][16] = {"LLEG_JOINT1","LLEG_JOINT2","LLEG_JOINT3","LLEG_JOINT4","LLEG_JOINT5"};
+      m_seqpgainIn.read();
+      std::cerr << "\x1b[31m" << "change pgain!!" << "\x1b[0m" << std::endl;
+      for(int i = 0; i < 5; i++) {
+          m_robot->setServoGainPercentage(joint_names[i], m_seqpgain.data);
+      }
+  }
+#endif
 
   // read from iob
   m_robot->readJointAngles(m_q.data.get_buffer());  

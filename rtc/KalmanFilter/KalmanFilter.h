@@ -10,6 +10,9 @@
 #ifndef NULL_COMPONENT_H
 #define NULL_COMPONENT_H
 
+//define if you use velocity and angular velocity of root link
+#define CALC_VEL_N_ANGVEL
+
 #include <rtm/Manager.h>
 #include <rtm/DataFlowComponentBase.h>
 #include <rtm/CorbaPort.h>
@@ -21,6 +24,10 @@
 
 #include "RPYKalmanFilter.h"
 #include "EKFilter.h"
+
+#ifdef CALC_VEL_N_ANGVEL
+#include "../SequencePlayer/SequencePlayer.h"
+#endif
 
 // Service implementation headers
 // <rtc-template block="service_impl_h">
@@ -134,6 +141,18 @@ protected:
   RTC::InPort<RTC::TimedDoubleSeq> m_qCurrentIn;
   RTC::TimedOrientation3D m_baseRpyCurrent;
   RTC::OutPort<RTC::TimedOrientation3D> m_baseRpyCurrentOut;
+
+#ifdef CALC_VEL_N_ANGVEL
+  //added by karasawa for chidori
+  TimedVelocity3D m_vel;
+  TimedAngularVelocity3D m_angvel;
+  TimedAcceleration3D m_acc_output;
+  RTC::TimedLong m_emergency_step_flag;
+  RTC::OutPort<RTC::TimedVelocity3D> m_velOut;
+  RTC::OutPort<RTC::TimedAngularVelocity3D> m_angvelOut;
+  RTC::OutPort<RTC::TimedAcceleration3D> m_accOut;
+  RTC::InPort<RTC::TimedLong> m_emergency_step_flagIn;
+#endif
   
   // </rtc-template>
 

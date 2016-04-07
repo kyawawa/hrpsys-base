@@ -10,6 +10,9 @@
 #ifndef STABILIZER_COMPONENT_H
 #define STABILIZER_COMPONENT_H
 
+//define if you use velocity and angular velocity of root link
+#define CALC_VEL_N_ANGVEL
+
 #include <rtm/Manager.h>
 #include <rtm/DataFlowComponentBase.h>
 #include <rtm/CorbaPort.h>
@@ -27,6 +30,10 @@
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
 #include "../TorqueFilter/IIRFilter.h"
+
+#ifdef CALC_VEL_N_ANGVEL
+#include "../SequencePlayer/SequencePlayer.h"
+#endif
 
 // </rtc-template>
 
@@ -160,6 +167,18 @@ class Stabilizer
   RTC::TimedDoubleSeq m_COPInfo;
   RTC::TimedLong m_emergencySignal;
   RTC::TimedDoubleSeq m_qRefSeq;
+#ifdef CALC_VEL_N_ANGVEL
+  //added by karasawa for chidori
+  RTC::TimedVelocity3D m_vel;
+  RTC::TimedAngularVelocity3D m_angvel;
+  RTC::TimedAcceleration3D m_acc;
+  RTC::TimedLong m_emergency_step_flag;
+  RTC::TimedChar m_debug_show;
+  RTC::TimedDoubleSeq m_rfsensor_log;
+  RTC::TimedDoubleSeq m_lfsensor_log;
+  RTC::TimedDouble m_pgain;
+  RTC::TimedLong m_target_speed;
+#endif
   // for debug ouput
   RTC::TimedPoint3D m_originRefZmp, m_originRefCog, m_originRefCogVel, m_originNewZmp;
   RTC::TimedPoint3D m_originActZmp, m_originActCog, m_originActCogVel;
@@ -182,6 +201,18 @@ class Stabilizer
   RTC::InPort<RTC::TimedDoubleSeq> m_controlSwingSupportTimeIn;
   std::vector<RTC::InPort<RTC::TimedPoint3D> *> m_limbCOPOffsetIn;
   RTC::InPort<RTC::TimedDoubleSeq> m_qRefSeqIn;
+#ifdef CALC_VEL_N_ANGVEL
+  //added by karasawa for chidori
+  RTC::InPort<RTC::TimedVelocity3D> m_velIn;
+  RTC::InPort<RTC::TimedAngularVelocity3D> m_angvelIn;
+  RTC::InPort<RTC::TimedAcceleration3D> m_accIn;
+  RTC::OutPort<RTC::TimedLong> m_emergency_step_flagOut;
+  RTC::OutPort<RTC::TimedChar> m_debug_showOut;
+  RTC::InPort<RTC::TimedDoubleSeq> m_rfsensor_logIn;
+  RTC::InPort<RTC::TimedDoubleSeq> m_lfsensor_logIn;
+  RTC::OutPort<RTC::TimedDouble>  m_pgainOut;
+  RTC::OutPort<RTC::TimedLong> m_target_speedOut;
+#endif
 
   std::vector<RTC::TimedDoubleSeq> m_wrenches;
   std::vector<RTC::InPort<RTC::TimedDoubleSeq> *> m_wrenchesIn;
@@ -287,6 +318,28 @@ class Stabilizer
   hrp::Vector3 pos_ctrl;
   double total_mass, transition_time, cop_check_margin, cp_check_margin, contact_decision_threshold;
   OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
+#ifdef CALC_VEL_N_ANGVEL
+  OpenHRP::StabilizerService::EmergencyStepMode emergency_step_mode;
+  OpenHRP::StabilizerService::DebugShow debug_show;
+  double pgain;
+  char once_emergency_step_flag;
+  typedef struct log{
+      long time;
+      double angle_vector[12];
+      double act_zmp[3];
+      double cog[3];
+      double acc[3];
+      double vel[3];
+      double ang_vel[3];
+      double rpy[3];
+      double wrenches[12];
+      double ref_wrenches[12];
+  }log_struct;
+  log_struct log_data[7501];
+  FILE *fp_log;
+  long time_offset;
+  long target_speed;
+#endif
 };
 
 

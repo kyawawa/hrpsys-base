@@ -70,7 +70,12 @@ private:
 
 class RPYKalmanFilter {
 public:
-    RPYKalmanFilter() : m_sensorR(hrp::Matrix33::Identity()) {};
+#ifndef CALC_VEL_N_ANGVEL
+    RPYKalmanFilter() : m_sensorR(hrp::Matrix33::Identity()){
+#else
+    RPYKalmanFilter() : m_sensorR(hrp::Matrix33::Identity()), dt(0.002), G(9.80665), loop_count(0), count(0), rpy_for_calc_vel_n_angvel(0){
+#endif
+    };
     void main_one (hrp::Vector3& rpy, hrp::Vector3& rpyRaw, hrp::Vector3& baseRpyCurrent, const hrp::Vector3& acc, const hrp::Vector3& gyro, const double& sl_y, const hrp::Matrix33& BtoS)
     {
       //
@@ -158,10 +163,106 @@ public:
     double getQangle () const { return Q_angle;};
     double getQrate () const { return Q_rate;};
     double getRangle () const { return R_angle;};
+#ifdef CALC_VEL_N_ANGVEL
+    void calc_vel_n_angvel (hrp::Vector3& vel, hrp::Vector3& angvel,hrp::Vector3& acc_without_g, const hrp::Vector3& acc, const hrp::Vector3& gyro, const hrp::Vector3& rpy, const hrp::Vector3& sensorPosition) {
+        loop_count++;
+        if(loop_count > 200) {
+            loop_count = 0;
+            count = 0;
+        }
+
+        double g_norm = sqrt(acc(0)*acc(0) + acc(1)*acc(1) + acc(2)*acc(2));
+        if( ((g_norm-G) < 0.005) && ((g_norm-G) > -0.005) ) {
+            count++;
+        }
+        if (loop_count == 0) {
+            //std::cerr << "\x1b[33m" << "g_norm |" << g_norm << "\x1b[0m" << std::endl;
+        }
+        if(count > 5) {
+            //std::cerr << "\x1b[31m" << "rpy angles is updated by acc!!" << "\x1b[0m" <<std::endl;
+            double r, p;
+            p = atan2( acc(0), sqrt( acc(1) * acc(1) + acc(2) * acc(2) ) );
+            r = atan2( acc(1) , acc(2) );
+            rpy_for_calc_vel_n_angvel(0) = r;
+            rpy_for_calc_vel_n_angvel(1) = p;
+            count = 0;
+            loop_count = 0;
+            //std::cerr << " r:" << r << "  p:" << p << std::endl;
+        }
+
+        hrp::Vector3 rpy_dot;
+        rpy_dot(0) = (gyro(1)*sin(rpy_for_calc_vel_n_angvel(2))+gyro(0)*cos(rpy_for_calc_vel_n_angvel(2)))/cos(rpy_for_calc_vel_n_angvel(1));
+        rpy_dot(1) = gyro(1)*cos(rpy_for_calc_vel_n_angvel(2))-gyro(0)*sin(rpy_for_calc_vel_n_angvel(2));
+        rpy_dot(2) = gyro(2)-rpy_dot(0)*sin(rpy_for_calc_vel_n_angvel(1));
+
+        rpy_for_calc_vel_n_angvel(0) += dt*rpy_dot(0);
+        rpy_for_calc_vel_n_angvel(1) += dt*rpy_dot(1);
+        rpy_for_calc_vel_n_angvel(2) += dt*rpy_dot(2);
+        rpy_for_calc_vel_n_angvel(2) *= 0.99;
+        //hrp::Vector3 modified_rpy = rpy;
+        //modified_rpy(0) = rpy(0) - 3.141592/2.0;
+        //std::cerr << "modified_rpy | r:" << modified_rpy(0) << "  p:" << modified_rpy(1) << "  y:" << modified_rpy(2) << std::endl;
+        //std::cerr << "rpy_for_calc_vel_n_angvel  | r:" << rpy_for_calc_vel_n_angvel(0) << "  p:" << rpy_for_calc_vel_n_angvel(1) << "  y:" << rpy_for_calc_vel_n_angvel(2) << std::endl;
+        hrp::Matrix33 realRotationMatrix = hrp::rotFromRpy(rpy_for_calc_vel_n_angvel);
+        //std::cerr << "realRotationMatrix ::" << std::endl;
+        //std::cerr << realRotationMatrix(0,0) << "  " << realRotationMatrix(0,1) << "  " << realRotationMatrix(0,2) << std::endl;
+        //std::cerr << realRotationMatrix(1,0) << "  " << realRotationMatrix(1,1) << "  " << realRotationMatrix(1,2) << std::endl;
+        //std::cerr << realRotationMatrix(2,0) << "  " << realRotationMatrix(2,1) << "  " << realRotationMatrix(2,2) << std::endl;
+        //std::cerr << std::endl;
+        angvel = gyro;
+
+        hrp::Matrix33 angvel_Matrix;
+        angvel_Matrix <<          0, -angvel(2),  angvel(1),
+                          angvel(2),          0, -angvel(0),
+                         -angvel(1),  angvel(0),          0;
+        hrp::Vector3 sensorPosition_relative_to_world = realRotationMatrix * sensorPosition;
+
+        hrp::Vector3 Body_acc = acc;// + gyro.cross(realRotationMatrix*sensorPosition_relative_to_world) + angvel.cross(angvel_Matrix*realRotationMatrix*sensorPosition_relative_to_world);
+        hrp::Vector3 g;
+        g << 0.0, 0.0, 9.80665;
+        g = realRotationMatrix*g;
+        //std::cerr << "g    x:" << g(0) << "  y:" << g(1) << "  z:" << g(2) << std::endl;
+        Body_acc = Body_acc - g;
+        acc_without_g = Body_acc;
+        /* 
+         * if(Body_acc(0) < 0.05 && Body_acc(0) > -0.05) {
+         *     Body_acc(0) = 0.0;
+         * }
+         * if(Body_acc(1) < 0.05 && Body_acc(1) > -0.05) {
+         *     Body_acc(1) = 0.0;
+         * }
+         * if(Body_acc(2) < 0.05 && Body_acc(2) > -0.05) {
+         *     Body_acc(2) = 0.0;
+         * }
+         */
+        //std::cerr << "acc_norm | " << (acc.norm()) << std::endl;
+        /* 
+         * if ( Body_acc(0) < -2.0 || Body_acc(0) > 2.0 ) {
+         *     std::cerr << "\x1b[33m"  << "body_acc | x:" << Body_acc(0) << "  y:" << Body_acc(1) << "  z:" << Body_acc(2) << "    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << "\x1b[0m" << std::endl;
+         * } else if ( Body_acc(1) < -2.0 || Body_acc(1) > 2.0 ) {
+         *     std::cerr << "\x1b[33m" <<  "body_acc | x:" << Body_acc(0) << "  y:" << Body_acc(1) << "  z:" << Body_acc(2) << "    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << "\x1b[0m" << std::endl;
+         * } else if ( !(loop_count % 100) ) {
+         *     std::cerr << "body_acc | x:" << Body_acc(0) << "  y:" << Body_acc(1) << "  z:" << Body_acc(2) << std::endl;
+         * }
+         */
+        if( (Body_acc(0) < 0.25) && (Body_acc(0) > -0.25) && (Body_acc(1) < 0.25) && (Body_acc(1) > -0.25) ) {
+            vel = (vel + Body_acc*dt)*0.99;//*0.9995;
+        } else {
+            vel = vel + Body_acc*dt;
+        }
+    }
+#endif
 private:
     KFilter r_filter, p_filter, y_filter;
     double Q_angle, Q_rate, R_angle;
     hrp::Matrix33 m_sensorR;
+#ifdef CALC_VEL_N_ANGVEL
+    int loop_count;
+    char count;
+    const double dt;
+    const double G;
+    hrp::Vector3 rpy_for_calc_vel_n_angvel;
+#endif
 };
 
 #endif /* RPYKALMANFILTER_H */

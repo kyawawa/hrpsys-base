@@ -10,6 +10,9 @@
 #ifndef SEQUENCEPLAYER_H
 #define SEQUENCEPLAYER_H
 
+//define if you use velocity and angular velocity of root link
+#define CALC_VEL_N_ANGVEL
+
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <rtm/Manager.h>
 #include <rtm/DataFlowComponentBase.h>
@@ -21,6 +24,16 @@
 #include <hrpModel/Body.h>
 #include <hrpModel/Sensor.h>
 #include "seqplay.h"
+
+#ifdef CALC_VEL_N_ANGVEL
+#include <rtm/CorbaNaming.h>
+#include <hrpModel/Link.h>
+#include <hrpModel/ModelLoaderUtil.h>
+#include <hrpModel/JointPath.h>
+#include <hrpUtil/MatrixSolvers.h>
+#include "../ImpedanceController/JointPathEx.h"
+#include "../RobotHardware/robot.h"
+#endif
 
 // Service implementation headers
 // <rtc-template block="service_impl_h">
@@ -120,6 +133,15 @@ class SequencePlayer
 
   void setMaxIKError(double pos, double rot);
   void setMaxIKIteration(short iter);
+#ifdef CALC_VEL_N_ANGVEL
+  double calc_theta_hard_coded(double time);
+  double calc_theta(double time, double angel);
+  enum EMERGENCY_STEP_FLAG{
+      OFF,
+      WAITHING,
+      EMERGENCY
+  };
+#endif
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
@@ -158,7 +180,29 @@ class SequencePlayer
   TimedDoubleSeq m_optionalData;
   OutPort<TimedDoubleSeq> m_optionalDataOut;
 
-  
+#ifdef CALC_VEL_N_ANGVEL
+    RTC::TimedLong m_emergency_step_flag;
+    RTC::InPort<RTC::TimedLong> m_emergency_step_flagIn;
+    RTC::TimedChar m_debug_show;
+    RTC::InPort<RTC::TimedChar> m_debug_showIn;
+    RTC::TimedOrientation3D m_rpy;
+    RTC::InPort<RTC::TimedOrientation3D> m_rpyIn;
+    RTC::TimedDouble m_pgain_in;
+    RTC::InPort<RTC::TimedDouble> m_pgain_inIn;
+    RTC::TimedDouble m_pgain_out;
+    RTC::OutPort<RTC::TimedDouble> m_pgain_outOut;
+    RTC::InPort<RTC::TimedLong> m_target_speedIn;
+    RTC::TimedLong m_target_speed;
+    RTC::TimedDoubleSeq m_qCurrent;
+    RTC::InPort<RTC::TimedDoubleSeq> m_qCurrentIn;
+    char once_emergency_step_flag;
+    double test_qRef;
+    double initial_qRef;
+    double current_qRef;
+    double time_for_calc_qRef;
+
+#endif
+
   // </rtc-template>
 
   // CORBA Port declaration
@@ -190,6 +234,68 @@ class SequencePlayer
   coil::Mutex m_mutex;
   double m_error_pos, m_error_rot;
   short m_iteration;
+#ifdef CALC_VEL_N_ANGVEL
+  typedef struct log{
+      long time;
+      double angle_vector[12];
+      double zmp[3];
+      double emergency_time;
+      double rest;
+  }log_struct;
+  log_struct log_data[7501];
+  double interference[90][100][100][100];
+  double angle_vector[91][3];
+  char rpy_show;
+  char ankle_test;
+  string base_parent_name;
+  string target_name;
+  hrp::JointPathExPtr manip;
+  hrp::Vector3 root_rpy;
+  double start_av[12];
+  hrp::Vector3 root_p;
+  hrp::Matrix33 root_R;
+  hrp::Vector3 foot_p;
+  hrp::Matrix33 foot_R;
+  double time;
+  double time_for_lleg;
+  double l;
+  double yaw_angle;
+  double yaw_angle_deg;
+  double theta;
+  double l_xy;
+  double root_displacement;
+  double step_angle;
+  hrp::Vector3 pos_diff;
+  hrp::Vector3 goal_p;
+  hrp::Matrix33 goal_R;
+  double lleg_av[6];
+  double target_q[12];
+  double prev_target[6];
+  char testes; // test no tameno hennsuu desuyo, so do not use usually.  bool ja naikedo, u can switch this variable false/true from true/false by writing debug show #17
+  FILE *fp_log;
+  FILE *knee_speed_test_log;
+  FILE *jump_test_log;
+  long time_offset;
+  double pgain_counter;
+  double servo_pgain;
+  char knee_speed_test;
+  double start_position;
+  double start_offset;
+  double set_offset_count;
+  const double theta_ad;
+  const double theta_cons;
+  double target_speed;
+  long target_speed_deg;
+  char jump_test;
+  hrp::Vector3 start_p;
+  hrp::Matrix33 start_R;
+  hrp::Vector3 target_p;
+  hrp::Matrix33 target_R;
+  double target_root_speed;
+  double upward_displacement;
+  double downward_displacement;
+  int bending_count;
+#endif
 };
 
 

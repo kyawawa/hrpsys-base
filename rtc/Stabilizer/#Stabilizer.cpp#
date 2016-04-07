@@ -547,7 +547,8 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_rfsensor_logIn.read();
   }
   if (m_lfsensor_logIn.isNew()) {
-      m_lfsensor_logIn.read();
+      bot->numSensors(hrp::Sensor::FORCE);
+      m_wrenches.resize(npforce);      m_lfsensor_logIn.read();
   }
 #endif
 

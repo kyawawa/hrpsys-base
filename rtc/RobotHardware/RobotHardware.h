@@ -10,6 +10,8 @@
 #ifndef ROBOT_HARDWARE_H
 #define ROBOT_HARDWARE_H
 
+#define CALC_VEL_N_ANGVEL
+
 #include <rtm/Manager.h>
 #include <rtm/DataFlowComponentBase.h>
 #include <rtm/CorbaPort.h>
@@ -127,9 +129,13 @@ class RobotHardware
   */
   TimedDoubleSeq m_tauRef;
   InPort<TimedDoubleSeq> m_tauRefIn;
-  
-  // </rtc-template>
 
+#ifdef CALC_VEL_N_ANGVEL
+  TimedDouble m_seqpgain;
+  InPort<TimedDouble> m_seqpgainIn;
+#endif
+
+  // </rtc-template>
   /**
      \brief array of actual angles of joint with jointId
   */

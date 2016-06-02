@@ -23,6 +23,7 @@
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
 #include "GaitGenerator.h"
+#include "ResolvedMomentumControl.h"
 // Service implementation headers
 // <rtc-template block="service_impl_h">
 #include "AutoBalancerService_impl.h"
@@ -119,7 +120,7 @@ class AutoBalancer
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
-  
+
   // </rtc-template>
 
   // DataInPort declaration
@@ -146,7 +147,7 @@ class AutoBalancer
   InPort<TimedPoint3D> m_refFootOriginExtMomentIn;
   // for debug
   TimedPoint3D m_cog;
-  
+
   // </rtc-template>
 
   // DataOutPort declaration
@@ -177,7 +178,7 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
-  
+
   // </rtc-template>
 
   // CORBA Port declaration
@@ -194,7 +195,7 @@ class AutoBalancer
 
   // Consumer declaration
   // <rtc-template block="consumer_declare">
-  
+
   // </rtc-template>
 
  private:
@@ -243,6 +244,9 @@ class AutoBalancer
   typedef boost::shared_ptr<rats::gait_generator> ggPtr;
   ggPtr gg;
   bool gg_is_walking, gg_solved;
+  // for rmc
+  typedef boost::shared_ptr<rats::RMController> rmcPtr;
+  rmcPtr rmc;
   // for abc
   typedef boost::shared_ptr<SimpleFullbodyInverseKinematicsSolver> fikPtr;
   fikPtr fik;

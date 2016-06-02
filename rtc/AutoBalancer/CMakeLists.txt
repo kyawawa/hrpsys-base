@@ -1,4 +1,4 @@
-set(comp_sources AutoBalancer.cpp AutoBalancerService_impl.cpp ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../SequencePlayer/interpolator.cpp PreviewController.cpp GaitGenerator.cpp)
+set(comp_sources AutoBalancer.cpp AutoBalancerService_impl.cpp ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../SequencePlayer/interpolator.cpp PreviewController.cpp GaitGenerator.cpp ResolvedMomentumControl.cpp)
 set(libs hrpModel-3.1 hrpCollision-3.1 hrpUtil-3.1 hrpsysBaseStub)
 add_library(AutoBalancer SHARED ${comp_sources})
 target_link_libraries(AutoBalancer ${libs})
@@ -10,14 +10,18 @@ target_link_libraries(testPreviewController ${libs})
 add_executable(testGaitGenerator testGaitGenerator.cpp ../ImpedanceController/RatsMatrix.cpp PreviewController.cpp GaitGenerator.cpp ../SequencePlayer/interpolator.cpp)
 target_link_libraries(testGaitGenerator ${libs})
 
+add_executable(testResolvedMomentumControl testResolvedMomentumControl.cpp ResolvedMomentumControl.cpp)
+target_link_libraries(testResolvedMomentumControl ${libs})
+
 add_executable(AutoBalancerComp AutoBalancerComp.cpp ${comp_sources})
 target_link_libraries(AutoBalancerComp ${libs})
 
 include_directories(${PROJECT_SOURCE_DIR}/rtc/SequencePlayer)
 
-set(target AutoBalancer AutoBalancerComp testPreviewController testGaitGenerator)
+set(target AutoBalancer AutoBalancerComp testPreviewController testGaitGenerator testResolvedMomentumControl)
 
 add_test(testPreviewControllerNoGP testPreviewController --use-gnuplot false)
+add_test(testResolvedMomentumControlNoGP testResolvedMomentumControl --use-gnuplot false)
 add_test(testGaitGeneratorTest0 testGaitGenerator --test0 --use-gnuplot false)
 add_test(testGaitGeneratorTest1 testGaitGenerator --test1 --use-gnuplot false)
 add_test(testGaitGeneratorTest2 testGaitGenerator --test2 --use-gnuplot false)
@@ -40,4 +44,3 @@ install(TARGETS ${target}
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
 )
-

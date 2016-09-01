@@ -71,6 +71,8 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_zmpOut("zmp", m_zmp),
     m_refCPOut("refCapturePoint", m_refCP),
     m_actCPOut("actCapturePoint", m_actCP),
+    m_absRefCPOut("absRefCapturePoint", m_absRefCP),
+    m_absActCPOut("absActCapturePoint", m_absActCP),
     m_actContactStatesOut("actContactStates", m_actContactStates),
     m_COPInfoOut("COPInfo", m_COPInfo),
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
@@ -134,6 +136,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("zmp", m_zmpOut);
   addOutPort("refCapturePoint", m_refCPOut);
   addOutPort("actCapturePoint", m_actCPOut);
+  addOutPort("absRefCapturePoint", m_absRefCPOut);
+  addOutPort("absActCapturePoint", m_absActCPOut);
   addOutPort("actContactStates", m_actContactStatesOut);
   addOutPort("COPInfo", m_COPInfoOut);
   addOutPort("emergencySignal", m_emergencySignalOut);
@@ -653,6 +657,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_actCP.data.z = rel_act_cp(2);
       m_actCP.tm = m_qRef.tm;
       m_actCPOut.write();
+      m_absActCP.data.x = abs_act_cp(0);
+      m_absActCP.data.y = abs_act_cp(1);
+      m_absActCP.data.z = abs_act_cp(2);
+      m_absActCP.tm = m_qRef.tm;
+      m_absActCPOut.write();
+      m_absRefCP.data.x = abs_ref_cp(0);
+      m_absRefCP.data.y = abs_ref_cp(1);
+      m_absRefCP.data.z = abs_ref_cp(2);
+      m_absActCP.tm = m_qRef.tm;
+      m_absRefCPOut.write();
       m_actContactStates.tm = m_qRef.tm;
       m_actContactStatesOut.write();
       m_COPInfo.tm = m_qRef.tm;
@@ -841,6 +855,7 @@ void Stabilizer::getActualParameters ()
     act_cp = act_cog + act_cogvel / std::sqrt(eefm_gravitational_acceleration / (act_cog - act_zmp)(2));
     rel_act_cp = hrp::Vector3(act_cp(0), act_cp(1), act_zmp(2));
     rel_act_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_act_cp) - m_robot->rootLink()->p);
+    abs_act_cp = ref_foot_origin_pos + ref_foot_origin_rot * act_cp;
     // <= Actual foot_origin frame
 
     // Actual world frame =>
@@ -1179,7 +1194,8 @@ void Stabilizer::getTargetParameters ()
     } else {
       ref_cogvel = (ref_cog - prev_ref_cog)/dt;
     }
-    prev_ref_foot_origin_rot = foot_origin_rot;
+    ref_foot_origin_pos = foot_origin_pos;
+    prev_ref_foot_origin_rot = ref_foot_origin_rot = foot_origin_rot;
     for (size_t i = 0; i < stikp.size(); i++) {
       stikp[i].target_ee_diff_p = foot_origin_rot.transpose() * (target_ee_p[i] - foot_origin_pos);
       stikp[i].target_ee_diff_r = foot_origin_rot.transpose() * target_ee_R[i];
@@ -1189,6 +1205,7 @@ void Stabilizer::getTargetParameters ()
     ref_cp = ref_cog + ref_cogvel / std::sqrt(eefm_gravitational_acceleration / (ref_cog - ref_zmp)(2));
     rel_ref_cp = hrp::Vector3(ref_cp(0), ref_cp(1), ref_zmp(2));
     rel_ref_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_ref_cp) - m_robot->rootLink()->p);
+    abs_ref_cp = ref_foot_origin_pos + ref_foot_origin_rot * ref_cp;
     sbp_cog_offset = foot_origin_rot.transpose() * sbp_cog_offset;
     // <= Reference foot_origin frame
   } else {

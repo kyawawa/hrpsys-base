@@ -1051,8 +1051,8 @@ namespace rats
     std::map<leg_type, std::string> leg_type_map;
     coordinates initial_foot_mid_coords;
     bool solved;
-    double leg_margin[4], overwritable_stride_limitation[4];
-    bool use_stride_limitation, is_emergency_walking;
+    double leg_margin[4], stride_limitation_for_circle_type[4], overwritable_stride_limitation[4], footstep_modification_gain[2];
+    bool use_stride_limitation, is_emergency_walking, modify_footsteps;
     stride_limitation_type default_stride_limitation_type;
 
     /* preview controller parameters */
@@ -1100,13 +1100,14 @@ namespace rats
         dt(_dt), all_limbs(_all_limbs), default_step_time(1.0), default_double_support_ratio_before(0.1), default_double_support_ratio_after(0.1), default_double_support_static_ratio_before(0.0), default_double_support_static_ratio_after(0.0), default_double_support_ratio_swing_before(0.1), default_double_support_ratio_swing_after(0.1), gravitational_acceleration(DEFAULT_GRAVITATIONAL_ACCELERATION),
         finalize_count(0), optional_go_pos_finalize_footstep_num(0), overwrite_footstep_index(0), overwritable_footstep_index_offset(1),
         velocity_mode_flg(VEL_IDLING), emergency_flg(IDLING),
-        use_inside_step_limitation(true), use_stride_limitation(false), is_emergency_walking(false), default_stride_limitation_type(SQUARE),
+        use_inside_step_limitation(true), use_stride_limitation(false), is_emergency_walking(false), modify_footsteps(false), default_stride_limitation_type(SQUARE),
         preview_controller_ptr(NULL) {
         swing_foot_zmp_offsets = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         prev_que_sfzos = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         leg_type_map = boost::assign::map_list_of<leg_type, std::string>(RLEG, "rleg")(LLEG, "lleg")(RARM, "rarm")(LARM, "larm");
         for (size_t i = 0; i < 4; i++) leg_margin[i] = 0.1;
         for (size_t i = 0; i < 4; i++) overwritable_stride_limitation[i] = 0.2;
+        for (size_t i = 0; i < 2; i++) footstep_modification_gain[i] = 0.0;
     };
     ~gait_generator () {
       if ( preview_controller_ptr != NULL ) {
@@ -1118,8 +1119,8 @@ namespace rats
                                     const std::vector<step_node>& initial_support_leg_steps,
                                     const std::vector<step_node>& initial_swing_leg_dst_steps,
                                     const double delay = 1.6);
-    bool proc_one_tick ();
     void limit_stride (step_node& cur_fs, const step_node& prev_fs) const;
+    bool proc_one_tick (const hrp::Vector3& diff_cp = hrp::Vector3(0.0, 0.0, 0.0), const std::vector<bool>& contact_states = std::vector<bool>());
     void append_footstep_nodes (const std::vector<std::string>& _legs, const std::vector<coordinates>& _fss)
     {
         std::vector<step_node> tmp_sns;
@@ -1266,8 +1267,14 @@ namespace rats
         overwritable_stride_limitation[i] = _overwritable_stride_limitation[i];
       }
     };
+    void set_footstep_modification_gain (const double _footstep_modification_gain[2]) {
+      for (size_t i=0; i<2; i++) {
+        footstep_modification_gain[i] = _footstep_modification_gain[i];
+      }
+    };
     void set_use_stride_limitation (const bool _use_stride_limitation) { use_stride_limitation = _use_stride_limitation; };
     void set_is_emergency_walking (const bool _is_emergency_walking) { is_emergency_walking = _is_emergency_walking; };
+    void set_modify_footsteps (const bool _modify_footsteps) { modify_footsteps = _modify_footsteps; };
     void set_stride_limitation_type (const stride_limitation_type _tmp) { default_stride_limitation_type = _tmp; };
     void set_toe_check_thre (const double _a) { thtc.set_toe_check_thre(_a); };
     void set_heel_check_thre (const double _a) { thtc.set_heel_check_thre(_a); };
@@ -1427,7 +1434,9 @@ namespace rats
     size_t get_overwrite_check_timing () const { return static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5) - 1;}; // Almost middle of step time
     double get_leg_margin (const size_t idx) const { return leg_margin[idx]; };
     double get_overwritable_stride_limitation (const size_t idx) const { return overwritable_stride_limitation[idx]; };
+    double get_footstep_modification_gain (const size_t idx) const { return footstep_modification_gain[idx]; };
     bool get_use_stride_limitation () const { return use_stride_limitation; };
+    bool get_modify_footsteps () const { return modify_footsteps; };
     stride_limitation_type get_stride_limitation_type () const { return default_stride_limitation_type; };
     double get_toe_check_thre () const { return thtc.get_toe_check_thre(); };
     double get_heel_check_thre () const { return thtc.get_heel_check_thre(); };

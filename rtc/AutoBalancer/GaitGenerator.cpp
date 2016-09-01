@@ -552,7 +552,7 @@ namespace rats
     emergency_flg = IDLING;
   };
 
-  bool gait_generator::proc_one_tick ()
+  bool gait_generator::proc_one_tick (const hrp::Vector3& diff_cp, const std::vector<bool>& contact_states)
   {
     solved = false;
     /* update refzmp */
@@ -594,6 +594,44 @@ namespace rats
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
       }
+    }
+    // modify footsteps based on diff_cp
+    if (modify_footsteps && isfinite(diff_cp(0)) && isfinite(diff_cp(1))) {
+      static hrp::Vector3 prev_diff_cp;
+      if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
+        static double preview_f_sum;
+        if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
+          preview_f_sum = preview_controller_ptr->get_preview_f(preview_controller_ptr->get_delay());
+          for (size_t i = preview_controller_ptr->get_delay()-1; i >= lcg.get_lcg_count()+1; i--) {
+            preview_f_sum += preview_controller_ptr->get_preview_f(i);
+          }
+        }
+        if (lcg.get_lcg_count() <= preview_controller_ptr->get_delay()) {
+          preview_f_sum += preview_controller_ptr->get_preview_f(lcg.get_lcg_count());
+        }
+        hrp::Vector3 d_footstep = (footstep_modification_gain[0] * diff_cp + footstep_modification_gain[1] * (diff_cp - prev_diff_cp)/dt) / preview_f_sum;
+        d_footstep(2) = 0.0;
+        // overwrite footsteps
+        if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&
+            lcg.get_lcg_count() >= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * default_double_support_ratio_after) - 1 &&
+            !(lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5) - 1 && contact_states[0] && contact_states[1]) &&
+            is_emergency_walking) {
+          // stride limitation check
+          hrp::Vector3 orig_footstep_pos = footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos;
+          footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos += d_footstep;
+          limit_stride(footstep_nodes_list[get_overwritable_index()].front(), footstep_nodes_list[get_overwritable_index()-1].front());
+          d_footstep = footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos - orig_footstep_pos;
+          for (size_t i = lcg.get_footstep_index()+1; i < footstep_nodes_list.size(); i++) {
+            footstep_nodes_list[i].front().worldcoords.pos(0) += d_footstep(0);
+            footstep_nodes_list[i].front().worldcoords.pos(1) += d_footstep(1);
+          }
+        }
+        overwrite_footstep_nodes_list.insert(overwrite_footstep_nodes_list.end(), footstep_nodes_list.begin()+lcg.get_footstep_index(), footstep_nodes_list.end());
+        // overwrite zmp
+        overwrite_refzmp_queue(overwrite_footstep_nodes_list);
+        overwrite_footstep_nodes_list.clear();
+      }
+      prev_diff_cp = diff_cp;
     }
     // limit stride
     if (use_stride_limitation && lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-overwritable_footstep_index_offset-2 &&

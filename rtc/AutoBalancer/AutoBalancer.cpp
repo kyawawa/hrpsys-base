@@ -61,6 +61,9 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_optionalDataIn("optionalData", m_optionalData),
       m_emergencySignalIn("emergencySignal", m_emergencySignal),
       m_emergencySignalWalkingIn("emergencySignalWalking", m_emergencySignalWalking),
+      m_absActCPIn("absActCapturePoint", m_absActCP),
+      m_absRefCPIn("absRefCapturePoint", m_absRefCP),
+      m_actContactStatesIn("actContactStates", m_actContactStates),
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
       m_basePosOut("basePosOut", m_basePos),
@@ -104,6 +107,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addInPort("optionalData", m_optionalDataIn);
     addInPort("emergencySignal", m_emergencySignalIn);
     addInPort("emergencySignalWalking", m_emergencySignalWalkingIn);
+    addInPort("absActCapturePoint", m_absActCPIn);
+    addInPort("absRefCapturePoint", m_absRefCPIn);
+    addInPort("actContactStates", m_actContactStatesIn);
 
     // Set OutPort buffer
     addOutPort("q", m_qOut);
@@ -366,6 +372,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     if (sen == NULL) {
         std::cerr << "[" << m_profile.instance_name << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! " << std::endl;
     }
+    diff_cp = hrp::Vector3(0.0, 0.0, 0.0);
+    act_contact_states.resize(2, false);
+
     return RTC::RTC_OK;
 }
 
@@ -472,6 +481,19 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     if (m_emergencySignalWalkingIn.isNew()){
       m_emergencySignalWalkingIn.read();
       gg->set_is_emergency_walking(m_emergencySignalWalking.data);
+    }
+    if (m_absActCPIn.isNew() && m_absRefCPIn.isNew()) {
+      m_absActCPIn.read();
+      m_absRefCPIn.read();
+      diff_cp(0) = m_absRefCP.data.x - m_absActCP.data.x;
+      diff_cp(1) = m_absRefCP.data.y - m_absActCP.data.y;
+      diff_cp(2) = m_absRefCP.data.z - m_absActCP.data.z;
+    }
+    if (m_actContactStatesIn.isNew()) {
+      m_actContactStatesIn.read();
+      for (size_t i=0; i<2; i++) {
+        act_contact_states[i] = m_actContactStates.data[i];
+      }
     }
 
     Guard guard(m_mutex);
@@ -663,7 +685,7 @@ void AutoBalancer::getTargetParameters()
     }
     if ( gg_is_walking ) {
       gg->set_default_zmp_offsets(default_zmp_offsets);
-      gg_solved = gg->proc_one_tick();
+      gg_solved = gg->proc_one_tick(diff_cp, act_contact_states);
       {
           std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
           coordinates tmpc;
@@ -1146,7 +1168,7 @@ void AutoBalancer::startWalking ()
     gg->initialize_gait_parameter(ref_cog, init_support_leg_steps, init_swing_leg_dst_steps);
   }
   is_hand_fix_initial = true;
-  while ( !gg->proc_one_tick() );
+  while ( !gg->proc_one_tick(diff_cp, act_contact_states) );
   {
     Guard guard(m_mutex);
     gg_is_walking = gg_solved = true;
@@ -1481,6 +1503,8 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_leg_margin(i_param.leg_margin);
   gg->set_overwritable_stride_limitation(i_param.overwritable_stride_limitation);
   gg->set_use_stride_limitation(i_param.use_stride_limitation);
+  gg->set_footstep_modification_gain(i_param.footstep_modification_gain);
+  gg->set_modify_footsteps(i_param.modify_footsteps);
   if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::SQUARE) {
     gg->set_stride_limitation_type(SQUARE);
   } else if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::CIRCLE) {
@@ -1566,6 +1590,10 @@ bool AutoBalancer::getGaitGeneratorParam(OpenHRP::AutoBalancerService::GaitGener
     i_param.overwritable_stride_limitation[i] = gg->get_overwritable_stride_limitation(i);
   }
   i_param.use_stride_limitation = gg->get_use_stride_limitation();
+  for (size_t i=0; i<2; i++) {
+    i_param.footstep_modification_gain[i] = gg->get_footstep_modification_gain(i);
+  }
+  i_param.modify_footsteps = gg->get_modify_footsteps();
   if (gg->get_stride_limitation_type() == SQUARE) {
     i_param.stride_limitation_type = OpenHRP::AutoBalancerService::SQUARE;
   } else if (gg->get_stride_limitation_type() == CIRCLE) {

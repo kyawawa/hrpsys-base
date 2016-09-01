@@ -1501,6 +1501,7 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_optional_go_pos_finalize_footstep_num(i_param.optional_go_pos_finalize_footstep_num);
   gg->set_overwritable_footstep_index_offset(i_param.overwritable_footstep_index_offset);
   gg->set_leg_margin(i_param.leg_margin);
+  gg->set_stride_limitation_for_circle_type(i_param.stride_limitation_for_circle_type);
   gg->set_overwritable_stride_limitation(i_param.overwritable_stride_limitation);
   gg->set_use_stride_limitation(i_param.use_stride_limitation);
   gg->set_footstep_modification_gain(i_param.footstep_modification_gain);
@@ -1585,6 +1586,9 @@ bool AutoBalancer::getGaitGeneratorParam(OpenHRP::AutoBalancerService::GaitGener
   i_param.overwritable_footstep_index_offset = gg->get_overwritable_footstep_index_offset();
   for (size_t i=0; i<4; i++) {
     i_param.leg_margin[i] = gg->get_leg_margin(i);
+  }
+  for (size_t i=0; i<4; i++) {
+    i_param.stride_limitation_for_circle_type[i] = gg->get_stride_limitation_for_circle_type(i);
   }
   for (size_t i=0; i<4; i++) {
     i_param.overwritable_stride_limitation[i] = gg->get_overwritable_stride_limitation(i);

@@ -239,6 +239,8 @@ module OpenHRP
       long optional_go_pos_finalize_footstep_num;
       /// Offset for overwritable footstep index. Offset from current footstep index. Used in emergency_stop and velocity_mode.
       long overwritable_footstep_index_offset;
+      /// Stride limitation when generating footsteps with stride limitation type CIRCLE (front, rear, outside, inside) [m]
+      DblArray4 stride_limitation_for_circle_type;
       /// Stride limitation when overwriting footsteps (front, rear, outside, inside) [m]
       DblArray4 overwritable_stride_limitation;
       /// Use stride limitation or not

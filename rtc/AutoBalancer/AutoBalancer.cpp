@@ -60,6 +60,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_zmpIn("zmpIn", m_zmp),
       m_optionalDataIn("optionalData", m_optionalData),
       m_emergencySignalIn("emergencySignal", m_emergencySignal),
+      m_emergencySignalWalkingIn("emergencySignalWalking", m_emergencySignalWalking),
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
       m_basePosOut("basePosOut", m_basePos),
@@ -102,6 +103,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addInPort("zmpIn", m_zmpIn);
     addInPort("optionalData", m_optionalDataIn);
     addInPort("emergencySignal", m_emergencySignalIn);
+    addInPort("emergencySignalWalking", m_emergencySignalWalkingIn);
 
     // Set OutPort buffer
     addOutPort("q", m_qOut);
@@ -466,6 +468,10 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         //     is_stop_mode = true;
         //     gg->emergency_stop();
         // }
+    }
+    if (m_emergencySignalWalkingIn.isNew()){
+      m_emergencySignalWalkingIn.read();
+      gg->set_is_emergency_walking(m_emergencySignalWalking.data);
     }
 
     Guard guard(m_mutex);

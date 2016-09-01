@@ -1052,7 +1052,7 @@ namespace rats
     coordinates initial_foot_mid_coords;
     bool solved;
     double leg_margin[4], overwritable_stride_limitation[4];
-    bool use_stride_limitation;
+    bool use_stride_limitation, is_emergency_walking;
     stride_limitation_type default_stride_limitation_type;
 
     /* preview controller parameters */
@@ -1100,7 +1100,7 @@ namespace rats
         dt(_dt), all_limbs(_all_limbs), default_step_time(1.0), default_double_support_ratio_before(0.1), default_double_support_ratio_after(0.1), default_double_support_static_ratio_before(0.0), default_double_support_static_ratio_after(0.0), default_double_support_ratio_swing_before(0.1), default_double_support_ratio_swing_after(0.1), gravitational_acceleration(DEFAULT_GRAVITATIONAL_ACCELERATION),
         finalize_count(0), optional_go_pos_finalize_footstep_num(0), overwrite_footstep_index(0), overwritable_footstep_index_offset(1),
         velocity_mode_flg(VEL_IDLING), emergency_flg(IDLING),
-        use_inside_step_limitation(true), use_stride_limitation(false), default_stride_limitation_type(SQUARE),
+        use_inside_step_limitation(true), use_stride_limitation(false), is_emergency_walking(false), default_stride_limitation_type(SQUARE),
         preview_controller_ptr(NULL) {
         swing_foot_zmp_offsets = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         prev_que_sfzos = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
@@ -1267,6 +1267,7 @@ namespace rats
       }
     };
     void set_use_stride_limitation (const bool _use_stride_limitation) { use_stride_limitation = _use_stride_limitation; };
+    void set_is_emergency_walking (const bool _is_emergency_walking) { is_emergency_walking = _is_emergency_walking; };
     void set_stride_limitation_type (const stride_limitation_type _tmp) { default_stride_limitation_type = _tmp; };
     void set_toe_check_thre (const double _a) { thtc.set_toe_check_thre(_a); };
     void set_heel_check_thre (const double _a) { thtc.set_heel_check_thre(_a); };

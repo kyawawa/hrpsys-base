@@ -395,6 +395,7 @@ class HrpsysConfigurator(object):
             connectPorts(self.abc.port("toeheelRatio"), self.st.port("toeheelRatio"))
             if self.es:
                 connectPorts(self.st.port("emergencySignal"), self.es.port("emergencySignal"))
+                connectPorts(self.st.port("emergencySignalWalking"), self.abc.port("emergencySignalWalking"))
             connectPorts(self.st.port("emergencySignal"), self.abc.port("emergencySignal"))
 
         # ref force moment connection

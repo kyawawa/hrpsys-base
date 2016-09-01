@@ -135,6 +135,8 @@ class AutoBalancer
   std::vector<InPort<TimedDoubleSeq> *> m_ref_forceIn;
   TimedLong m_emergencySignal;
   InPort<TimedLong> m_emergencySignalIn;
+  TimedBoolean m_emergencySignalWalking;
+  InPort<TimedBoolean> m_emergencySignalWalkingIn;
   // for debug
   TimedPoint3D m_cog;
   

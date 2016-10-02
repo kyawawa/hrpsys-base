@@ -63,6 +63,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_actContactStatesOut("actContactStates", m_actContactStates),
     m_COPInfoOut("COPInfo", m_COPInfo),
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
+    m_walkingStopSignalOut("walkingStopSignal", m_walkingStopSignal),
     // for debug output
     m_originRefZmpOut("originRefZmp", m_originRefZmp),
     m_originRefCogOut("originRefCog", m_originRefCog),
@@ -97,7 +98,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   // <rtc-template block="bind_config">
   // Bind variables and configuration variable
   bindParameter("debugLevel", m_debugLevel, "0");
-  
+
   // </rtc-template>
 
   // Registration: InPort/OutPort/Service
@@ -125,6 +126,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("actContactStates", m_actContactStatesOut);
   addOutPort("COPInfo", m_COPInfoOut);
   addOutPort("emergencySignal", m_emergencySignalOut);
+  addOutPort("walkingStopSignal", m_walkingStopSignalOut);
   // for debug output
   addOutPort("originRefZmp", m_originRefZmpOut);
   addOutPort("originRefCog", m_originRefCogOut);
@@ -139,15 +141,15 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
   addOutPort("debugData", m_debugDataOut);
-  
+
   // Set service provider to Ports
   m_StabilizerServicePort.registerProvider("service0", "StabilizerService", m_service0);
-  
+
   // Set service consumers to Ports
-  
+
   // Set CORBA Service Ports
   addPort(m_StabilizerServicePort);
-  
+
   // </rtc-template>
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["dt"].c_str());
@@ -164,7 +166,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   // parameters for internal robot model
   m_robot = hrp::BodyPtr(new hrp::Body());
-  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), 
+  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(),
                                CosNaming::NamingContext::_duplicate(naming.getRootContext())
                                )){
     std::cerr << "[" << m_profile.instance_name << "]failed to load model[" << prop["model"] << "]" << std::endl;
@@ -408,6 +410,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       if ( sen != NULL ) is_legged_robot = true;
   }
   is_emergency = false;
+  is_walking_emergency = false;
   reset_emergency_flag = false;
 
   m_qCurrent.data.length(m_robot->numJoints());
@@ -698,10 +701,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     if (reset_emergency_flag) {
       m_emergencySignal.data = 0;
       m_emergencySignalOut.write();
+      m_walkingStopSignal.data = false;
+      m_walkingStopSignalOut.write();
       reset_emergency_flag = false;
     } else if (is_emergency) {
       m_emergencySignal.data = 1;
       m_emergencySignalOut.write();
+    } else if (is_walking_emergency) {
+      m_walkingStopSignal.data = true;
+      m_walkingStopSignalOut.write();
+      reset_emergency_flag = true;
     }
   }
 
@@ -1317,6 +1326,21 @@ void Stabilizer::calcStateForEmergencySignal()
           }
       }
   }
+  // collision of foot Check
+  bool is_foot_collided = false;
+  if (is_walking) {
+      // SimpleZMPDistributor::leg_type float_leg;
+      // if (isContact(contact_states_index_map["rleg"])) float_leg = SimpleZMPDistributor::LLEG;
+      // else if (isContact(contact_states_index_map["lleg"])) float_leg = SimpleZMPDistributor::RLEG;
+      std::string float_leg;
+      if (isContact(contact_states_index_map["rleg"])) float_leg = "lleg";
+      else if (isContact(contact_states_index_map["lleg"])) float_leg = "rleg";
+      if (std::fabs(m_wrenches[0].data[0]) > 200) {
+      // if (std::fabs(m_wrenches[1].data[3]) > 200) {
+          is_foot_collided = true;
+          std::cerr << "[" << m_profile.instance_name << "] Detect over 200[N] " << std::endl;
+      }
+  }
   // Total check for emergency signal
   switch (emergency_check_mode) {
   case OpenHRP::StabilizerService::NO_CHECK:
@@ -1330,6 +1354,9 @@ void Stabilizer::calcStateForEmergencySignal()
       break;
   case OpenHRP::StabilizerService::TILT:
       is_emergency = will_fall | is_falling;
+      break;
+  case OpenHRP::StabilizerService::FOOT:
+      is_walking_emergency = is_foot_collided;
       break;
   default:
       break;
@@ -2002,7 +2029,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   eefm_support_polygon_vertices_sequence set" << std::endl;
       std::vector<std::vector<Eigen::Vector2d> > support_polygon_vec;
-      for (size_t ee_idx = 0; ee_idx < i_stp.eefm_support_polygon_vertices_sequence.length(); ee_idx++) {
+      std::cerr << "[" << m_profile.instance_name << "] signal is set to FOOT" << std::endl;
+     for (size_t ee_idx = 0; ee_idx < i_stp.eefm_support_polygon_vertices_sequence.length(); ee_idx++) {
           std::vector<Eigen::Vector2d> tvec;
           for (size_t v_idx = 0; v_idx < i_stp.eefm_support_polygon_vertices_sequence[ee_idx].vertices.length(); v_idx++) {
               tvec.push_back(Eigen::Vector2d(i_stp.eefm_support_polygon_vertices_sequence[ee_idx].vertices[v_idx].pos[0],
@@ -2606,5 +2634,3 @@ extern "C"
   }
 
 };
-
-

@@ -112,6 +112,8 @@ namespace rats
   void refzmp_generator::calc_current_refzmp (hrp::Vector3& ret, std::vector<hrp::Vector3>& swing_foot_zmp_offsets, const double default_double_support_ratio_before, const double default_double_support_ratio_after, const double default_double_support_static_ratio_before, const double default_double_support_static_ratio_after)
   {
     size_t cnt = one_step_count - refzmp_count; // current counter (0 -> one_step_count)
+    // debug
+    // std::cerr << "cnt: " << cnt << std::endl;
     size_t double_support_count_half_before = default_double_support_ratio_before * one_step_count;
     size_t double_support_count_half_after = default_double_support_ratio_after * one_step_count;
     size_t double_support_static_count_half_before = default_double_support_static_ratio_before * one_step_count;
@@ -442,15 +444,26 @@ namespace rats
 
     calc_ratio_from_double_support_ratio(default_double_support_ratio_before, default_double_support_ratio_after);
     swing_leg_steps.clear();
+    // debug
+    // std::cerr << "lcg_count: " << lcg_count << std::endl;
     calc_current_swing_leg_steps(swing_leg_steps, current_step_height, current_toe_angle, current_heel_angle);
     if ( 1 <= lcg_count ) {
       lcg_count--;
     } else {
-      //std::cerr << "gp " << footstep_index << std::endl;
+      // std::cerr << "gp " << footstep_index << std::endl;
       if (footstep_index < fnsl.size() - 1) {
         footstep_index++;
       }
-      if (footstep_index < fnsl.size() - 1) {
+      if (get_foot_emergency()) {
+        // footstep_index--;
+        set_foot_emergency(false);
+        clear_interpolators();
+      }
+      // debug
+      std::cerr << "footstep_index: " << footstep_index << std::endl;
+      std::cerr << "fnsl size: " << fnsl.size() << std::endl;
+      std::cerr << "lcg_count: " << lcg_count << std::endl;
+      if (footstep_index < fnsl.size() - 1) { // overwriteした時にlcg_countが変わらないせいでここが反映されない
         current_step_height = fnsl[footstep_index].front().step_height;
         current_toe_angle = fnsl[footstep_index].front().toe_angle;
         current_heel_angle = fnsl[footstep_index].front().heel_angle;
@@ -486,6 +499,7 @@ namespace rats
       default:
           break;
       }
+      std::cerr << "lcg_count is zero" << std::endl;
       reset_foot_ratio_interpolator();
     }
   };
@@ -541,12 +555,31 @@ namespace rats
   bool gait_generator::proc_one_tick ()
   {
     solved = false;
+
     /* update refzmp */
     if (emergency_flg == EMERGENCY_STOP && lcg.get_footstep_index() > 0) {
         leg_type cur_leg = footstep_nodes_list[lcg.get_footstep_index()].front().l_r;
-        overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(cur_leg==RLEG?LLEG:RLEG, footstep_nodes_list[lcg.get_footstep_index()-1].front().worldcoords, 0, default_step_time, 0, 0)));
-        overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(cur_leg, footstep_nodes_list[lcg.get_footstep_index()].front().worldcoords, 0, default_step_time, 0, 0)));
-        overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(cur_leg==RLEG?LLEG:RLEG, footstep_nodes_list[lcg.get_footstep_index()-1].front().worldcoords, 0, default_step_time, 0, 0)));
+        leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
+        coordinates tmp_coords = footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords;
+
+        // tmp_coords.pos = (tmp_coords.pos + footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos) / 2;
+        // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));
+        // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
+        // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+
+        if (overwritable_footstep_index_offset > 0) {
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, lcg.get_default_step_height() + 0.2, default_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
+        } else {
+            tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            // set_foot_emergency(true);
+            // set_lcg_count(get_lcg_count() + 1000);
+            // set_lcg_count(0);
+        }
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
         emergency_flg = STOPPING;
@@ -910,9 +943,13 @@ namespace rats
         preview_controller_ptr->remove_preview_queue(lcg.get_lcg_count()); // Remove queue except current footstep. ZMP queue for current footstep remains
     }
     /*   reset index and counter */
+    //debug
+    std::cerr << "lcg_count: " << lcg.get_lcg_count() << std::endl;
     rg.set_indices(idx);
     if (overwritable_footstep_index_offset == 0) {
         rg.set_refzmp_count(lcg.get_lcg_count()); // Start refzmp_count from current remaining footstep count of swinging.
+        rg.set_one_step_count(lcg.get_lcg_count());
+        std::cerr << "refzmp_count is set to " << lcg.get_lcg_count() << std::endl;
     } else {
         rg.set_refzmp_count(static_cast<size_t>(fnsl[0][0].step_time/dt)); // Start refzmp_count from step length of first overwrite step
     }
@@ -960,4 +997,3 @@ namespace rats
     return ret;
   };
 }
-

@@ -58,8 +58,8 @@ void interpolator::clear()
 
 // 1dof interpolator
 void interpolator::hoffarbib(double &remain_t_,
-			     double a0, double a1, double a2, 
-			     double a3, double a4, double a5, 
+			     double a0, double a1, double a2,
+			     double a3, double a4, double a5,
 			     double &xx, double &vv, double &aa)
 {
 #define EPS 1e-6
@@ -209,7 +209,7 @@ void interpolator::go(const double *newg, const double *newv, double time, bool 
 {
   if (time == 0) time = calc_interpolation_time(newg);
   setGoal(newg, newv, time, false);
-  
+
   do{
       interpolate(time);
   }while(time>0);
@@ -284,6 +284,8 @@ void interpolator::pop()
     double *&ddvs = ddq.front();
     delete [] ddvs;
     ddq.pop_front();
+  } else if (remain_t > 0) {
+      remain_t = 0;
   }
 }
 
@@ -360,17 +362,17 @@ void interpolator::get(double *x_, double *v_, double *a_, bool popp)
   if (length!=0){
     double *&vs = q.front();
     if (vs == NULL) {
-      cerr << "[interpolator " << name << "] interpolator::get vs = NULL, q.size() = " << q.size() 
+      cerr << "[interpolator " << name << "] interpolator::get vs = NULL, q.size() = " << q.size()
 	   << ", length = " << length << endl;
     }
     double *&dvs = dq.front();
     if (dvs == NULL) {
-      cerr << "[interpolator " << name << "] interpolator::get dvs = NULL, dq.size() = " << dq.size() 
+      cerr << "[interpolator " << name << "] interpolator::get dvs = NULL, dq.size() = " << dq.size()
 	   << ", length = " << length << endl;
     }
     double *&ddvs = ddq.front();
     if (ddvs == NULL) {
-      cerr << "[interpolator " << name << "] interpolator::get ddvs = NULL, ddq.size() = " << ddq.size() 
+      cerr << "[interpolator " << name << "] interpolator::get ddvs = NULL, ddq.size() = " << ddq.size()
 	   << ", length = " << length << endl;
     }
     memcpy(x_, vs, sizeof(double)*dim);

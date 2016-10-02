@@ -344,6 +344,7 @@ namespace rats
       // setter
       void set_indices (const size_t idx) { refzmp_index = idx; };
       void set_refzmp_count(const size_t _refzmp_count) { refzmp_count = _refzmp_count; };
+      void set_one_step_count(const size_t _one_step_count) { one_step_count = _one_step_count; };
       void set_default_zmp_offsets(const std::vector<hrp::Vector3>& tmp) { default_zmp_offsets = tmp; };
       void set_toe_zmp_offset_x (const double _off) { toe_zmp_offset_x = _off; };
       void set_heel_zmp_offset_x (const double _off) { heel_zmp_offset_x = _off; };
@@ -638,7 +639,7 @@ namespace rats
         return calc_antecedent_path_base(cycloid_path);
       };
     };
-    
+
     class cross_delay_hoffarbib_trajectory_generator : public delay_hoffarbib_trajectory_generator
     {
     private:
@@ -706,6 +707,7 @@ namespace rats
       double toe_pos_offset_x, heel_pos_offset_x, toe_angle, heel_angle, foot_dif_rot_angle;
       bool use_toe_joint, use_toe_heel_auto_set;
       toe_heel_type current_src_toe_heel_type, current_dst_toe_heel_type;
+      bool foot_emergency;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -734,7 +736,7 @@ namespace rats
           rdtg(), cdtg(),
           thp(),
           foot_ratio_interpolator(NULL), swing_foot_rot_ratio_interpolator(NULL), toe_heel_interpolator(NULL),
-          toe_pos_offset_x(0.0), heel_pos_offset_x(0.0), toe_angle(0.0), heel_angle(0.0), foot_dif_rot_angle(0.0), use_toe_joint(false), use_toe_heel_auto_set(false),
+         toe_pos_offset_x(0.0), heel_pos_offset_x(0.0), toe_angle(0.0), heel_angle(0.0), foot_dif_rot_angle(0.0), use_toe_joint(false), use_toe_heel_auto_set(false), foot_emergency(false),
           current_src_toe_heel_type(SOLE), current_dst_toe_heel_type(SOLE)
       {
         support_leg_types = boost::assign::list_of<leg_type>(RLEG);
@@ -798,6 +800,7 @@ namespace rats
       void set_heel_angle (const double _angle) { heel_angle = _angle; };
       void set_use_toe_joint (const bool ut) { use_toe_joint = ut; };
       void set_use_toe_heel_auto_set (const bool ut) { use_toe_heel_auto_set = ut; };
+      void set_foot_emergency (const bool fe) { foot_emergency = fe; };
       void set_swing_support_steps_list (const std::vector< std::vector<step_node> >& fnsl)
       {
           std::vector<step_node> prev_support_leg_steps = support_leg_steps_list.front();
@@ -944,6 +947,7 @@ namespace rats
       };
       size_t get_footstep_index() const { return footstep_index; };
       size_t get_lcg_count() const { return lcg_count; };
+      void set_lcg_count (size_t c) { lcg_count = c; };
       double get_current_swing_time(const size_t idx) const { return current_swing_time.at(idx); };
       const std::vector<step_node>& get_swing_leg_steps() const { return swing_leg_steps; };
       const std::vector<step_node>& get_support_leg_steps() const { return support_leg_steps; };
@@ -1005,6 +1009,7 @@ namespace rats
               return no_using_toe_heel_ratio;
           }
       };
+      bool get_foot_emergency () const { return foot_emergency; };
     };
 
   class gait_generator
@@ -1191,6 +1196,10 @@ namespace rats
         emergency_flg = EMERGENCY_STOP;
       }
     };
+    void reset_emergency_stop ()
+    {
+        emergency_flg = IDLING;
+    };
     /* parameter setting */
     void set_default_step_time (const double _default_step_time) { default_step_time = _default_step_time; };
     void set_default_double_support_ratio_before (const double _default_double_support_ratio_before) { default_double_support_ratio_before = _default_double_support_ratio_before; };
@@ -1241,6 +1250,7 @@ namespace rats
         return lcgret && rgret;
     };
     void set_use_toe_joint (const bool ut) { lcg.set_use_toe_joint(ut); };
+    void set_foot_emergency (const bool fe) { lcg.set_foot_emergency(fe); };
     void set_leg_default_translate_pos (const std::vector<hrp::Vector3>& off) { footstep_param.leg_default_translate_pos = off;};
     void set_optional_go_pos_finalize_footstep_num (const size_t num) { optional_go_pos_finalize_footstep_num = num; };
     void set_all_limbs (const std::vector<std::string>& _all_limbs) { all_limbs = _all_limbs; };
@@ -1400,6 +1410,7 @@ namespace rats
     };
     size_t get_footstep_index() const { return lcg.get_footstep_index(); };
     size_t get_lcg_count() const { return lcg.get_lcg_count(); };
+    void set_lcg_count (size_t c) { lcg.set_lcg_count(c); };
     double get_current_swing_time(const size_t idx) const { return lcg.get_current_swing_time(idx); };
     std::vector<leg_type> get_current_support_states() const { return lcg.get_current_support_states();};
     double get_default_step_time () const { return default_step_time; };
@@ -1436,6 +1447,7 @@ namespace rats
     int get_NUM_TH_PHASES () const { return NUM_TH_PHASES; };
     bool get_use_toe_joint () const { return lcg.get_use_toe_joint(); };
     double get_current_toe_heel_ratio () const { return lcg.get_current_toe_heel_ratio(get_use_toe_heel_transition()); };
+    bool get_foot_emergency () const { return lcg.get_foot_emergency(); };
     void get_leg_default_translate_pos (std::vector<hrp::Vector3>& off) const { off = footstep_param.leg_default_translate_pos; };
     size_t get_overwritable_footstep_index_offset () const { return overwritable_footstep_index_offset; };
     const std::vector<leg_type> calc_counter_leg_types_from_footstep_nodes (const std::vector<step_node>& fns, std::vector<std::string> _all_limbs) const;

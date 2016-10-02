@@ -116,7 +116,7 @@ class AutoBalancer
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
-  
+
   // </rtc-template>
 
   // DataInPort declaration
@@ -147,9 +147,11 @@ class AutoBalancer
   InPort<TimedPoint3D> m_absRefCOGVelIn;
   TimedBooleanSeq m_actContactStates;
   InPort<TimedBooleanSeq> m_actContactStatesIn;
+  TimedBoolean m_walkingStopSignal;
+  InPort<TimedBoolean> m_walkingStopSignalIn;
   // for debug
   TimedPoint3D m_cog;
-  
+
   // </rtc-template>
 
   // DataOutPort declaration
@@ -180,7 +182,7 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
-  
+
   // </rtc-template>
 
   // CORBA Port declaration
@@ -197,7 +199,7 @@ class AutoBalancer
 
   // Consumer declaration
   // <rtc-template block="consumer_declare">
-  
+
   // </rtc-template>
 
  private:

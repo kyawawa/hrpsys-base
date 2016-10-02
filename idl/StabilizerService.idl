@@ -45,7 +45,8 @@ module OpenHRP
       NO_CHECK,
       COP,
       CP,
-      TILT
+      TILT,
+      FOOT
     };
 
     /**
@@ -263,4 +264,3 @@ module OpenHRP
     boolean dummy();
   };
 };
-

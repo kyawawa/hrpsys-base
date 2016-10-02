@@ -173,6 +173,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_COPInfo;
   RTC::TimedLong m_emergencySignal;
   RTC::TimedBoolean m_emergencySignalWalking;
+  RTC::TimedBoolean m_walkingStopSignal;
   RTC::TimedDoubleSeq m_qRefSeq;
   RTC::TimedBoolean m_walkingStates;
   RTC::TimedPoint3D m_sbpCogOffset;
@@ -224,6 +225,7 @@ class Stabilizer
   RTC::OutPort<RTC::TimedDoubleSeq> m_COPInfoOut;
   RTC::OutPort<RTC::TimedLong> m_emergencySignalOut;
   RTC::OutPort<RTC::TimedBoolean> m_emergencySignalWalkingOut;
+  RTC::OutPort<RTC::TimedBoolean> m_walkingStopSignalOut;
   // for debug output
   RTC::OutPort<RTC::TimedPoint3D> m_originRefZmpOut, m_originRefCogOut, m_originRefCogVelOut, m_originNewZmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_originActZmpOut, m_originActCogOut, m_originActCogVelOut;
@@ -293,7 +295,7 @@ class Stabilizer
   int transition_count, loop;
   int m_is_falling_counter;
   std::vector<int> m_will_fall_counter;
-  bool is_legged_robot, on_ground, is_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance;
+  bool is_legged_robot, on_ground, is_emergency, is_walking_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance;
   bool is_walking, is_estop_while_walking;
   hrp::Vector3 current_root_p, target_root_p, ref_foot_origin_pos;
   hrp::Matrix33 current_root_R, target_root_R, prev_act_foot_origin_rot, prev_ref_foot_origin_rot, target_foot_origin_rot, ref_foot_origin_rot;

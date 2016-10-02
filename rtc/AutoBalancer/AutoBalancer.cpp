@@ -49,6 +49,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_zmpIn("zmpIn", m_zmp),
       m_optionalDataIn("optionalData", m_optionalData),
       m_emergencySignalIn("emergencySignal", m_emergencySignal),
+      m_walkingStopSignalIn("walkingStopSignal", m_walkingStopSignal),
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
       m_basePosOut("basePosOut", m_basePos),
@@ -91,6 +92,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addInPort("zmpIn", m_zmpIn);
     addInPort("optionalData", m_optionalDataIn);
     addInPort("emergencySignal", m_emergencySignalIn);
+    addInPort("walkingStopSignal", m_walkingStopSignalIn);
 
     // Set OutPort buffer
     addOutPort("q", m_qOut);
@@ -106,19 +108,19 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("cogOut", m_cogOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
-  
+
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
-  
+
     // Set service consumers to Ports
-  
+
     // Set CORBA Service Ports
     addPort(m_AutoBalancerServicePort);
-  
+
     // </rtc-template>
     // <rtc-template block="bind_config">
     // Bind variables and configuration variable
-  
+
     // </rtc-template>
 
     RTC::Properties& prop =  getProperties();
@@ -133,7 +135,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     }
     nameServer = nameServer.substr(0, comPos);
     RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-    if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), 
+    if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(),
                                  CosNaming::NamingContext::_duplicate(naming.getRootContext())
                                  )){
       std::cerr << "[" << m_profile.instance_name << "] failed to load model[" << prop["model"] << "]" << std::endl;
@@ -384,7 +386,7 @@ RTC::ReturnCode_t AutoBalancer::onFinalize()
 RTC::ReturnCode_t AutoBalancer::onActivated(RTC::UniqueId ec_id)
 {
     std::cerr << "[" << m_profile.instance_name<< "] onActivated(" << ec_id << ")" << std::endl;
-    
+
     return RTC::RTC_OK;
 }
 
@@ -455,6 +457,15 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         //     is_stop_mode = true;
         //     gg->emergency_stop();
         // }
+    }
+
+    if (m_walkingStopSignalIn.isNew()){
+        m_walkingStopSignalIn.read();
+        if (!is_stop_mode) {
+            std::cerr << "[" << m_profile.instance_name << "] walkingStopSignal is set!" << std::endl;
+            is_stop_mode = true;
+            gg->emergency_stop();
+        }
     }
 
     Guard guard(m_mutex);
@@ -820,7 +831,7 @@ void AutoBalancer::getTargetParameters()
     // Move hand for hand fix mode
     //   If arms' ABCIKparam.is_active is true, move hands according to cog velocity.
     //   If is_hand_fix_mode is false, no hand fix mode and move hands according to cog velocity.
-    //   If is_hand_fix_mode is true, hand fix mode and do not move hands in Y axis in tmp_fix_coords.rot.    
+    //   If is_hand_fix_mode is true, hand fix mode and do not move hands in Y axis in tmp_fix_coords.rot.
     if (gg_is_walking) {
         // hand control while walking = solve hand ik with is_hand_fix_mode and solve hand ik without is_hand_fix_mode
         bool is_hand_control_while_walking = false;
@@ -1262,6 +1273,7 @@ bool AutoBalancer::releaseEmergencyStop ()
       std::cerr << "[" << m_profile.instance_name << "] releaseEmergencyStop" << std::endl;
       is_stop_mode = false;
   }
+  gg->reset_emergency_stop();
   return true;
 }
 
@@ -1439,7 +1451,7 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_swing_trajectory_final_distance_weight(i_param.swing_trajectory_final_distance_weight);
   gg->set_swing_trajectory_time_offset_xy2z(i_param.swing_trajectory_time_offset_xy2z);
   gg->set_stair_trajectory_way_point_offset(hrp::Vector3(i_param.stair_trajectory_way_point_offset[0], i_param.stair_trajectory_way_point_offset[1], i_param.stair_trajectory_way_point_offset[2]));
-  gg->set_cycloid_delay_kick_point_offset(hrp::Vector3(i_param.cycloid_delay_kick_point_offset[0], i_param.cycloid_delay_kick_point_offset[1], i_param.cycloid_delay_kick_point_offset[2]));  
+  gg->set_cycloid_delay_kick_point_offset(hrp::Vector3(i_param.cycloid_delay_kick_point_offset[0], i_param.cycloid_delay_kick_point_offset[1], i_param.cycloid_delay_kick_point_offset[2]));
   gg->set_gravitational_acceleration(i_param.gravitational_acceleration);
   gg->set_toe_angle(i_param.toe_angle);
   gg->set_heel_angle(i_param.heel_angle);
@@ -1876,11 +1888,11 @@ bool AutoBalancer::adjustFootSteps(const OpenHRP::AutoBalancerService::Footstep&
       //   Input : ee coords
       //   Output : link coords
       memcpy(eepos.data(), rfootstep.pos, sizeof(double)*3);
-      eerot = (Eigen::Quaternion<double>(rfootstep.rot[0], rfootstep.rot[1], rfootstep.rot[2], rfootstep.rot[3])).normalized().toRotationMatrix(); // rtc: 
+      eerot = (Eigen::Quaternion<double>(rfootstep.rot[0], rfootstep.rot[1], rfootstep.rot[2], rfootstep.rot[3])).normalized().toRotationMatrix(); // rtc:
       ikp["rleg"].adjust_interpolation_target_r0 = eerot * ikp["rleg"].localR.transpose();
       ikp["rleg"].adjust_interpolation_target_p0 = eepos - ikp["rleg"].adjust_interpolation_target_r0 * ikp["rleg"].localPos;
       memcpy(eepos.data(), lfootstep.pos, sizeof(double)*3);
-      eerot = (Eigen::Quaternion<double>(lfootstep.rot[0], lfootstep.rot[1], lfootstep.rot[2], lfootstep.rot[3])).normalized().toRotationMatrix(); // rtc: 
+      eerot = (Eigen::Quaternion<double>(lfootstep.rot[0], lfootstep.rot[1], lfootstep.rot[2], lfootstep.rot[3])).normalized().toRotationMatrix(); // rtc:
       ikp["lleg"].adjust_interpolation_target_r0 = eerot * ikp["lleg"].localR.transpose();
       ikp["lleg"].adjust_interpolation_target_p0 = eepos - ikp["lleg"].adjust_interpolation_target_r0 * ikp["lleg"].localPos;
       mid_coords(target_mid_coords, 0.5,
@@ -2105,5 +2117,3 @@ extern "C"
     }
 
 };
-
-

@@ -680,14 +680,19 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_emergencySignal.data = 1;
       m_emergencySignalOut.write();
     } else if (is_walking_emergency) {
-      m_walkingStopSignal.data = true;
-      m_walkingStopSignalOut.write();
-      reset_emergency_flag = true;
+      walkingEmergencyStop();
     }
   }
 
   return RTC::RTC_OK;
 }
+
+
+void Stabilizer::walkingEmergencyStop() {
+    m_walkingStopSignal.data = true;
+    m_walkingStopSignalOut.write();
+    reset_emergency_flag = true;
+};
 
 void Stabilizer::getCurrentParameters ()
 {

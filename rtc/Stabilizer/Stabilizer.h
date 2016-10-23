@@ -136,6 +136,8 @@ class Stabilizer
   hrp::Vector3 vlimit(const hrp::Vector3& value, double llimit_value, double ulimit_value);
   hrp::Vector3 vlimit(const hrp::Vector3& value, const hrp::Vector3& limit_value);
 
+  void walkingEmergencyStop();
+
   inline bool isContact (const size_t idx) // 0 = right, 1 = left
   {
     return (prev_act_force_z[idx] > 25.0);

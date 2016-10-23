@@ -261,6 +261,7 @@ module OpenHRP
      * @return
      */
     void stopStabilizer();
+    void walkingEmergencyStop();
     boolean dummy();
   };
 };

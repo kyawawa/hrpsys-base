@@ -574,7 +574,7 @@ namespace rats
     if (emergency_flg == EMERGENCY_STOP && lcg.get_footstep_index() > 0) {
         leg_type cur_leg = footstep_nodes_list[lcg.get_footstep_index()].front().l_r;
         leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
-        coordinates tmp_coords = footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords;
+        coordinates tmp_coords = footstep_nodes_list[get_overwritable_index()].front().worldcoords;
 
         // tmp_coords.pos = (tmp_coords.pos + footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos) / 2;
         // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));

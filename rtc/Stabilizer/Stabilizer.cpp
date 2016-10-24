@@ -1340,10 +1340,11 @@ void Stabilizer::calcStateForEmergencySignal()
       std::string float_leg;
       if (isContact(contact_states_index_map["rleg"])) float_leg = "lleg";
       else if (isContact(contact_states_index_map["lleg"])) float_leg = "rleg";
-      if (std::fabs(m_wrenches[0].data[0]) > 200) {
-      // if (std::fabs(m_wrenches[1].data[3]) > 200) {
+      // if (std::fabs(m_wrenches[0].data[0]) > 200) {
+      if (std::fabs(m_wrenches[1].data[4]) > 30) {
           is_foot_collided = true;
-          std::cerr << "[" << m_profile.instance_name << "] Detect over 200[N] " << std::endl;
+          // std::cerr << "[" << m_profile.instance_name << "] Detect over 200[N] " << std::endl;
+          std::cerr << "[" << m_profile.instance_name << "] Detect over 30[Nm] " << std::endl;
       }
   }
   // Total check for emergency signal

@@ -12,7 +12,6 @@ target_link_libraries(testGaitGenerator ${libs})
 
 add_executable(testResolvedMomentumControl testResolvedMomentumControl.cpp ResolvedMomentumControl.cpp)
 target_link_libraries(testResolvedMomentumControl ${libs})
-target_compile_definitions(testResolvedMomentumControl PRIVATE OPENHRP_DIR="${OPENHRP_DIR}")
 
 add_executable(AutoBalancerComp AutoBalancerComp.cpp ${comp_sources})
 target_link_libraries(AutoBalancerComp ${libs})

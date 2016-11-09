@@ -404,6 +404,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   limb_stretch_avoidance_time_const = 1.5;
   limb_stretch_avoidance_vlimit[0] = -100 * 1e-3 * dt; // lower limit
   limb_stretch_avoidance_vlimit[1] = 50 * 1e-3 * dt; // upper limit
+  cp_offset = hrp::Vector3(0.0, 0.0, 0.0);
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -853,6 +854,7 @@ void Stabilizer::getActualParameters ()
     }
     // capture point
     act_cp = act_cog + act_cogvel / std::sqrt(eefm_gravitational_acceleration / (act_cog - act_zmp)(2));
+    act_cp = hrp::Vector3(act_cp(0) + cp_offset(0), act_cp(1) + cp_offset(1), act_cp(2));
     rel_act_cp = hrp::Vector3(act_cp(0), act_cp(1), act_zmp(2));
     rel_act_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_act_cp) - m_robot->rootLink()->p);
     abs_act_cp = ref_foot_origin_pos + ref_foot_origin_rot * act_cp;
@@ -1821,6 +1823,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.eefm_body_attitude_control_gain[i] = eefm_body_attitude_control_gain[i];
     i_stp.ref_capture_point[i] = ref_cp(i);
     i_stp.act_capture_point[i] = act_cp(i);
+    i_stp.cp_offset[i] = cp_offset(i);
   }
   i_stp.eefm_pos_time_const_support.length(stikp.size());
   i_stp.eefm_pos_damping_gain.length(stikp.size());
@@ -2019,6 +2022,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     eefm_body_attitude_control_time_const[i] = i_stp.eefm_body_attitude_control_time_const[i];
     ref_cp(i) = i_stp.ref_capture_point[i];
     act_cp(i) = i_stp.act_capture_point[i];
+    cp_offset(i) = i_stp.cp_offset[i]; 
   }
   bool is_damping_parameter_ok = true;
   if ( i_stp.eefm_pos_damping_gain.length () == stikp.size() &&

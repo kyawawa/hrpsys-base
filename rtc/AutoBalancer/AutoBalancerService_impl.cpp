@@ -110,8 +110,12 @@ CORBA::Boolean AutoBalancerService_impl::releaseEmergencyStop()
     return m_autobalancer->releaseEmergencyStop();
 };
 
+CORBA::Boolean AutoBalancerService_impl::setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec)
+{
+    return m_autobalancer->setRMCSelectionMatrix(Svec);
+};
+
 void AutoBalancerService_impl::autobalancer(AutoBalancer *i_autobalancer)
 {
   m_autobalancer = i_autobalancer;
-} 
-
+}

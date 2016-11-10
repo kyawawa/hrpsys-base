@@ -5,7 +5,7 @@
 //#include "OpenHRPCommon.idl"
 module OpenHRP
 {
-  
+
   interface AutoBalancerService
   {
     typedef sequence<double, 3> DblSequence3;
@@ -14,6 +14,7 @@ module OpenHRP
     typedef double DblArray3[3];
     typedef double DblArray4[4];
     typedef double DblArray5[5];
+    typedef double DblArray6[6];
 
     /**
      * @struct Footstep
@@ -146,6 +147,15 @@ module OpenHRP
     enum StrideLimitationType {
       SQUARE,
       CIRCLE
+    };
+
+    /**
+     * @enum IKType
+     * @brief Type of decision joint angle
+     */
+    enum IKType {
+        MODE_IK,
+        MODE_RMC
     };
 
     /**
@@ -327,6 +337,8 @@ module OpenHRP
       DblArray2 limb_stretch_avoidance_vlimit;
       /// Sequence of limb length margin from max limb length [m]
       sequence<double> limb_length_margin;
+      /// SimpleFullbodyIK or Resolved Momenutm Control
+      IKType default_ik_type;
     };
 
     /**
@@ -438,7 +450,7 @@ module OpenHRP
 
     /**
      * @brief Adjust Footsteps.
-     * @param 
+     * @param
      * @return true if set successfully, false otherwise
      */
     boolean adjustFootSteps(in Footstep rfootstep, in Footstep lfootstep);
@@ -464,5 +476,6 @@ module OpenHRP
      * @return true if set successfully, false otherwise
      */
     boolean releaseEmergencyStop();
+    boolean setRMCSelectionMatrix(in DblArray6 Svec);
   };
 };

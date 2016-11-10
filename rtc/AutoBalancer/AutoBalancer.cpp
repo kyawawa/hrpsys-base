@@ -122,19 +122,19 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("cogOut", m_cogOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
-  
+
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
-  
+
     // Set service consumers to Ports
-  
+
     // Set CORBA Service Ports
     addPort(m_AutoBalancerServicePort);
-  
+
     // </rtc-template>
     // <rtc-template block="bind_config">
     // Bind variables and configuration variable
-  
+
     // </rtc-template>
 
     RTC::Properties& prop =  getProperties();
@@ -149,7 +149,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     }
     nameServer = nameServer.substr(0, comPos);
     RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-    if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), 
+    if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(),
                                  CosNaming::NamingContext::_duplicate(naming.getRootContext())
                                  )){
       std::cerr << "[" << m_profile.instance_name << "] failed to load model[" << prop["model"] << "]" << std::endl;
@@ -294,6 +294,16 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     m_walkingStates.data = false;
     fix_leg_coords = coordinates();
 
+    // RMC
+    hrp::dvector6 Svec;
+    Svec << 1, 1, 1, 0, 0, 1;
+    rmc = rmcPtr(new rats::RMController(m_robot, Svec));
+    // for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+    //     rmc->addConstraintLink(m_robot, it->second.target_link->name);
+    // }
+    rmc->addConstraintLink(m_robot, "LLEG_JOINT5");
+    rmc->addConstraintLink(m_robot, "RLEG_JOINT5");
+
     // load virtual force sensors
     readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
     // ref force port
@@ -403,7 +413,7 @@ RTC::ReturnCode_t AutoBalancer::onFinalize()
 RTC::ReturnCode_t AutoBalancer::onActivated(RTC::UniqueId ec_id)
 {
     std::cerr << "[" << m_profile.instance_name<< "] onActivated(" << ec_id << ")" << std::endl;
-    
+
     return RTC::RTC_OK;
 }
 
@@ -496,7 +506,8 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         transition_interpolator_ratio = (control_mode == MODE_IDLE) ? 0.0 : 1.0;
       }
       if (control_mode != MODE_IDLE ) {
-        solveFullbodyIK();
+        if (ik_type == MODE_IK) {
+            solveFullbodyIK();
 //        /////// Inverse Dynamics /////////
 //        if(!idsb.is_initialized){
 //          idsb.setInitState(m_robot, m_dt);
@@ -512,7 +523,38 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 //          for(int i=0;i<3;i++) ref_zmp(i) = invdyn_zmp_filters[i].passFilter(ref_zmp(i));
 //        }
 //        updateInvDynStateBuffer(idsb);
+        } else {
+            // Revert
+            fik->revertRobotStateToCurrent();
+            hrp::Vector3 tmp_input_sbp = hrp::Vector3(0,0,0);
+            static_balance_point_proc_one(tmp_input_sbp, ref_zmp(2));
+            hrp::Vector3 dif_cog = tmp_input_sbp - ref_cog;
 
+            dif_cog *= leg_names_interpolator_ratio;
+            dif_cog(2) = m_robot->rootLink()->p(2) - target_root_p(2);
+            hrp::Vector3 ref_basePos = m_robot->rootLink()->p + -1 * move_base_gain * dif_cog;
+            hrp::Matrix33 ref_baseRot = target_root_R;
+
+            // hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog / m_dt
+            hrp::Vector3 Pref = m_robot->totalMass() * (ref_cog - m_robot->calcCM()) / m_dt;
+            hrp::Vector3 Lref = hrp::Vector3::Zero();
+
+            // if (Pref.norm() < 1e-6) Pref = hrp::Vector3::Zero();
+            // std::cerr << "tmp_input_sbp: " << tmp_input_sbp.transpose() << std::endl;
+            // std::cerr << "Pref: " << Pref.transpose() << std::endl;
+
+            for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+                hrp::dmatrix xi_ref_R = ((it->second.target_r0 - it->second.target_link->R) / m_dt) * (it->second.target_link->R).transpose();
+                xi_ref[it->second.target_link->name].segment(0, 3) = (it->second.target_p0 - it->second.target_link->p) / m_dt;
+                xi_ref[it->second.target_link->name](3) = (-xi_ref_R(1, 2) + xi_ref_R(2, 1)) / 2.0;
+                xi_ref[it->second.target_link->name](4) = (-xi_ref_R(2, 0) + xi_ref_R(0, 2)) / 2.0;
+                xi_ref[it->second.target_link->name](5) = (-xi_ref_R(0, 1) + xi_ref_R(1, 0)) / 2.0;
+                // std::cerr << it->second.target_link->name << " xi_ref: " << xi_ref[it->second.target_link->name].transpose() << std::endl;
+            }
+            rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
+
+            if (gg_is_walking && !gg_solved) stopWalking ();
+        }
         rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
       } else {
         rel_ref_zmp = input_zmp;
@@ -911,7 +953,7 @@ void AutoBalancer::updateTargetCoordsForHandFixMode (coordinates& tmp_fix_coords
     // Move hand for hand fix mode
     //   If arms' ABCIKparam.is_active is true, move hands according to cog velocity.
     //   If is_hand_fix_mode is false, no hand fix mode and move hands according to cog velocity.
-    //   If is_hand_fix_mode is true, hand fix mode and do not move hands in Y axis in tmp_fix_coords.rot.    
+    //   If is_hand_fix_mode is true, hand fix mode and do not move hands in Y axis in tmp_fix_coords.rot.
     if (gg_is_walking) {
         // hand control while walking = solve hand ik with is_hand_fix_mode and solve hand ik without is_hand_fix_mode
         bool is_hand_control_while_walking = false;
@@ -1318,6 +1360,15 @@ bool AutoBalancer::releaseEmergencyStop ()
   return true;
 }
 
+bool AutoBalancer::setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec)
+{
+    hrp::dvector6 tmp_svec;
+    for (size_t i = 0; i < 6; ++i) {
+        tmp_svec(i) = Svec[i];
+    }
+    setRMCSelectionMatrix(tmp_svec);
+}
+
 bool AutoBalancer::setFootSteps(const OpenHRP::AutoBalancerService::FootstepsSequence& fss, CORBA::Long overwrite_fs_idx)
 {
   OpenHRP::AutoBalancerService::StepParamsSequence spss;
@@ -1494,7 +1545,7 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_swing_trajectory_final_distance_weight(i_param.swing_trajectory_final_distance_weight);
   gg->set_swing_trajectory_time_offset_xy2z(i_param.swing_trajectory_time_offset_xy2z);
   gg->set_stair_trajectory_way_point_offset(hrp::Vector3(i_param.stair_trajectory_way_point_offset[0], i_param.stair_trajectory_way_point_offset[1], i_param.stair_trajectory_way_point_offset[2]));
-  gg->set_cycloid_delay_kick_point_offset(hrp::Vector3(i_param.cycloid_delay_kick_point_offset[0], i_param.cycloid_delay_kick_point_offset[1], i_param.cycloid_delay_kick_point_offset[2]));  
+  gg->set_cycloid_delay_kick_point_offset(hrp::Vector3(i_param.cycloid_delay_kick_point_offset[0], i_param.cycloid_delay_kick_point_offset[1], i_param.cycloid_delay_kick_point_offset[2]));
   gg->set_gravitational_acceleration(i_param.gravitational_acceleration);
   gg->set_toe_angle(i_param.toe_angle);
   gg->set_heel_angle(i_param.heel_angle);
@@ -1656,8 +1707,18 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
     default:
         break;
     }
+    switch (i_param.default_ik_type) {
+    case OpenHRP::AutoBalancerService::MODE_IK:
+        ik_type = MODE_IK;
+        break;
+    case OpenHRP::AutoBalancerService::MODE_RMC:
+        ik_type = MODE_RMC;
+        break;
+    defalut:
+        break;
+    }
   } else {
-      std::cerr << "[" << m_profile.instance_name << "]   use_force_mode cannot be changed to [" << i_param.use_force_mode << "] during MODE_ABC, MODE_SYNC_TO_IDLE or MODE_SYNC_TO_ABC." << std::endl;
+      std::cerr << "[" << m_profile.instance_name << "]   use_force_mode and ik_type cannot be changed to [" << i_param.use_force_mode << "] during MODE_ABC, MODE_SYNC_TO_IDLE or MODE_SYNC_TO_ABC." << std::endl;
   }
   graspless_manip_mode = i_param.graspless_manip_mode;
   graspless_manip_arm = std::string(i_param.graspless_manip_arm);
@@ -1730,7 +1791,12 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
   }
   std::cerr << std::endl;
   delete[] default_zmp_offsets_array;
+<<<<<<< HEAD
   std::cerr << "[" << m_profile.instance_name << "]   use_force_mode = " << getUseForceModeString() << std::endl;
+=======
+  std::cerr << "[" << m_profile.instance_name << "]   use_force_mode = " << use_force << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]   ik_type = " << ik_type << std::endl;
+>>>>>>> [rtc/AutoBalancer] Add MODE_RMC for calculate joint angle
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_mode = " << graspless_manip_mode << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_arm = " << graspless_manip_arm << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_p_gain = " << graspless_manip_p_gain.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << std::endl;
@@ -1889,11 +1955,11 @@ bool AutoBalancer::adjustFootSteps(const OpenHRP::AutoBalancerService::Footstep&
       //   Input : ee coords
       //   Output : link coords
       memcpy(eepos.data(), rfootstep.pos, sizeof(double)*3);
-      eerot = (Eigen::Quaternion<double>(rfootstep.rot[0], rfootstep.rot[1], rfootstep.rot[2], rfootstep.rot[3])).normalized().toRotationMatrix(); // rtc: 
+      eerot = (Eigen::Quaternion<double>(rfootstep.rot[0], rfootstep.rot[1], rfootstep.rot[2], rfootstep.rot[3])).normalized().toRotationMatrix(); // rtc:
       ikp["rleg"].adjust_interpolation_target_r0 = eerot;
       ikp["rleg"].adjust_interpolation_target_p0 = eepos;
       memcpy(eepos.data(), lfootstep.pos, sizeof(double)*3);
-      eerot = (Eigen::Quaternion<double>(lfootstep.rot[0], lfootstep.rot[1], lfootstep.rot[2], lfootstep.rot[3])).normalized().toRotationMatrix(); // rtc: 
+      eerot = (Eigen::Quaternion<double>(lfootstep.rot[0], lfootstep.rot[1], lfootstep.rot[2], lfootstep.rot[3])).normalized().toRotationMatrix(); // rtc:
       ikp["lleg"].adjust_interpolation_target_r0 = eerot;
       ikp["lleg"].adjust_interpolation_target_p0 = eepos;
       mid_coords(target_mid_coords, 0.5,
@@ -2261,5 +2327,3 @@ extern "C"
     }
 
 };
-
-

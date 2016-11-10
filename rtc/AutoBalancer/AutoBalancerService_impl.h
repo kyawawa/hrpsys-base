@@ -8,7 +8,7 @@ using namespace OpenHRP;
 
 class AutoBalancer;
 
-class AutoBalancerService_impl 
+class AutoBalancerService_impl
   : public virtual POA_OpenHRP::AutoBalancerService,
     public virtual PortableServer::RefCountServantBase
 {
@@ -34,11 +34,12 @@ public:
   CORBA::Boolean getRemainingFootstepSequence(OpenHRP::AutoBalancerService::FootstepSequence_out o_footstep , CORBA::Long& o_current_fs_idx);
   CORBA::Boolean getGoPosFootstepsSequence(CORBA::Double x, CORBA::Double y, CORBA::Double th, OpenHRP::AutoBalancerService::FootstepsSequence_out o_footstep);
   CORBA::Boolean releaseEmergencyStop();
+  CORBA::Boolean setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec);
   //
   //
   void autobalancer(AutoBalancer *i_autobalancer);
 private:
   AutoBalancer *m_autobalancer;
-};				 
+};
 
 #endif

@@ -43,7 +43,7 @@ using namespace RTC;
 class AutoBalancer
   : public RTC::DataFlowComponentBase
 {
- public:
+public:
   AutoBalancer(RTC::Manager* manager);
   virtual ~AutoBalancer();
 
@@ -116,6 +116,8 @@ class AutoBalancer
   bool getGoPosFootstepsSequence(const double& x, const double& y, const double& th, OpenHRP::AutoBalancerService::FootstepsSequence_out o_footstep);
   bool releaseEmergencyStop();
   void distributeReferenceZMPToWrenches (const hrp::Vector3& _ref_zmp);
+  bool setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec);
+  bool setRMCSelectionMatrix(const hrp::dvector6& Svec) {rmc->setSelectionMatrix(Svec);};
 
  protected:
   // Configuration variable declaration
@@ -247,6 +249,7 @@ class AutoBalancer
   // for rmc
   typedef boost::shared_ptr<rats::RMController> rmcPtr;
   rmcPtr rmc;
+  std::map<std::string, hrp::dvector6> xi_ref;
   // for abc
   typedef boost::shared_ptr<SimpleFullbodyInverseKinematicsSolver> fikPtr;
   fikPtr fik;
@@ -279,6 +282,7 @@ class AutoBalancer
   hrp::Vector3 sbp_offset, sbp_cog_offset;
   enum {MODE_NO_FORCE, MODE_REF_FORCE, MODE_REF_FORCE_WITH_FOOT, MODE_REF_FORCE_RFU_EXT_MOMENT} use_force;
   std::vector<hrp::Vector3> ref_forces;
+  enum {MODE_IK, MODE_RMC} ik_type;
 
   unsigned int m_debugLevel;
   bool is_legged_robot, is_stop_mode, is_hand_fix_mode, is_hand_fix_initial;

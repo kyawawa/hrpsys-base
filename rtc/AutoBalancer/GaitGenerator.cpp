@@ -598,6 +598,7 @@ namespace rats
     // modify footsteps based on diff_cp
     if (modify_footsteps && isfinite(diff_cp(0)) && isfinite(diff_cp(1))) {
       static hrp::Vector3 prev_diff_cp;
+      double margin_time_ratio = 0.1;
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
         static double preview_f_sum;
         if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
@@ -613,7 +614,7 @@ namespace rats
         d_footstep(2) = 0.0;
         // overwrite footsteps
         if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&
-            lcg.get_lcg_count() >= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * default_double_support_ratio_after) - 1 &&
+            lcg.get_lcg_count() >= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * (default_double_support_ratio_after * margin_time_ratio)) - 1 &&
             !(lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5) - 1 && contact_states[0] && contact_states[1]) &&
             is_emergency_walking) {
           // stride limitation check

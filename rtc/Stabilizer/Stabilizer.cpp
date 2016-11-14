@@ -666,7 +666,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_absRefCP.data.x = abs_ref_cp(0);
       m_absRefCP.data.y = abs_ref_cp(1);
       m_absRefCP.data.z = abs_ref_cp(2);
-      m_absActCP.tm = m_qRef.tm;
+      m_absRefCP.tm = m_qRef.tm;
       m_absRefCPOut.write();
       m_actContactStates.tm = m_qRef.tm;
       m_actContactStatesOut.write();

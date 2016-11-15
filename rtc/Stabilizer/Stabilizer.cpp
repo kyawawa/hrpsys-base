@@ -853,7 +853,7 @@ void Stabilizer::getActualParameters ()
       act_ee_R[i] = foot_origin_rot.transpose() * (target->R * stikp[i].localR);
     }
     // capture point
-    act_cp = act_cog + act_cogvel / std::sqrt(eefm_gravitational_acceleration / (act_cog - act_zmp)(2));
+    act_cp = act_cog + act_cogvel * std::sqrt(std::max(0.0, (act_cog - act_zmp)(2)) / eefm_gravitational_acceleration);
     act_cp = hrp::Vector3(act_cp(0) + cp_offset(0), act_cp(1) + cp_offset(1), act_cp(2));
     rel_act_cp = hrp::Vector3(act_cp(0), act_cp(1), act_zmp(2));
     rel_act_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_act_cp) - m_robot->rootLink()->p);
@@ -1204,7 +1204,7 @@ void Stabilizer::getTargetParameters ()
     }
     target_foot_origin_rot = foot_origin_rot;
     // capture point
-    ref_cp = ref_cog + ref_cogvel / std::sqrt(eefm_gravitational_acceleration / (ref_cog - ref_zmp)(2));
+    ref_cp = ref_cog + ref_cogvel * std::sqrt(std::max(0.0, (ref_cog - ref_zmp)(2)) / eefm_gravitational_acceleration);
     rel_ref_cp = hrp::Vector3(ref_cp(0), ref_cp(1), ref_zmp(2));
     rel_ref_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_ref_cp) - m_robot->rootLink()->p);
     abs_ref_cp = ref_foot_origin_pos + ref_foot_origin_rot * ref_cp;

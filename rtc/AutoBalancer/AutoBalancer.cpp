@@ -502,11 +502,11 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
             hrp::Vector3 dif_cog = tmp_input_sbp - ref_cog;
             dif_cog *= leg_names_interpolator_ratio;
             dif_cog(2) = m_robot->rootLink()->p(2) - target_root_p(2);
-            hrp::Vector3 ref_basePos = m_robot->rootLink()->p + -1 * move_base_gain * dif_cog;
-            hrp::Matrix33 ref_baseRot = target_root_R;
+            ref_basePos = m_robot->rootLink()->p + -1 * move_base_gain * dif_cog;
+            ref_baseRot = target_root_R;
 
-            // hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog / m_dt
-            hrp::Vector3 Pref = m_robot->totalMass() * (ref_cog - m_robot->calcCM()) / m_dt;
+            hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog / m_dt;
+            // hrp::Vector3 Pref = m_robot->totalMass() * (ref_cog - m_robot->calcCM()) / m_dt;
             hrp::Vector3 Lref = hrp::Vector3::Zero();
 
             // if (Pref.norm() < 1e-6) Pref = hrp::Vector3::Zero();
@@ -514,12 +514,9 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
             // std::cerr << "Pref: " << Pref.transpose() << std::endl;
 
             for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-                hrp::dmatrix xi_ref_R = ((it->second.target_r0 - it->second.target_link->R) / m_dt) * (it->second.target_link->R).transpose();
                 xi_ref[it->second.target_link->name].segment(0, 3) = (it->second.target_p0 - it->second.target_link->p) / m_dt;
-                xi_ref[it->second.target_link->name](3) = (-xi_ref_R(1, 2) + xi_ref_R(2, 1)) / 2.0;
-                xi_ref[it->second.target_link->name](4) = (-xi_ref_R(2, 0) + xi_ref_R(0, 2)) / 2.0;
-                xi_ref[it->second.target_link->name](5) = (-xi_ref_R(0, 1) + xi_ref_R(1, 0)) / 2.0;
-                // std::cerr << it->second.target_link->name << " xi_ref: " << xi_ref[it->second.target_link->name].transpose() << std::endl;
+                hrp::Matrix33 dR = it->second.target_link->R.transpose() * it->second.target_r0;
+                xi_ref[it->second.target_link->name].segment(3, 3) = hrp::omegaFromRot(dR) / m_dt;
             }
             rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
 

@@ -139,6 +139,7 @@ class AutoBalancer
   InPort<TimedBoolean> m_walkingStopSignalIn;
   // for debug
   TimedPoint3D m_cog;
+  TimedPoint3D m_refZmp;
 
   // </rtc-template>
 
@@ -170,6 +171,7 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
+  OutPort<TimedPoint3D> m_refZmpOut;
 
   // </rtc-template>
 

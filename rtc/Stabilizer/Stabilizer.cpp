@@ -436,6 +436,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   is_emergency = false;
   is_emergency_while_walking = false;
   is_walking_emergency = false;
+  swing_collision_threshold = 160;
+  swing_collision_direction = 0;
   reset_emergency_flag = false;
 
   m_qCurrent.data.length(m_robot->numJoints());
@@ -1417,17 +1419,14 @@ void Stabilizer::calcStateForEmergencySignal()
   // collision of foot Check
   bool is_foot_collided = false;
   if (is_walking) {
-      // SimpleZMPDistributor::leg_type float_leg;
-      // if (isContact(contact_states_index_map["rleg"])) float_leg = SimpleZMPDistributor::LLEG;
-      // else if (isContact(contact_states_index_map["lleg"])) float_leg = SimpleZMPDistributor::RLEG;
-      std::string float_leg;
-      if (isContact(contact_states_index_map["rleg"])) float_leg = "lleg";
-      else if (isContact(contact_states_index_map["lleg"])) float_leg = "rleg";
-      // if (std::fabs(m_wrenches[0].data[0]) > 200) {
-      if (std::fabs(m_wrenches[1].data[4]) > 30) {
-          is_foot_collided = true;
-          // std::cerr << "[" << m_profile.instance_name << "] Detect over 200[N] " << std::endl;
-          std::cerr << "[" << m_profile.instance_name << "] Detect over 30[Nm] " << std::endl;
+      // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
+      // else if (isContact(contact_states_index_map["lleg"])) swing_leg = "rleg";
+      if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) {
+          int swing_leg = (contact_states[contact_states_index_map["rleg"]]) ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
+          if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
+              is_foot_collided = true;
+              std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
+          }
       }
   }
   // Total check for emergency signal
@@ -1982,6 +1981,8 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.tilt_margin[i] = tilt_margin[i];
   }
   i_stp.contact_decision_threshold = contact_decision_threshold;
+  i_stp.swing_collision_threshold = swing_collision_threshold;
+  i_stp.swing_collision_direction = swing_collision_direction;
   i_stp.is_estop_while_walking = is_estop_while_walking;
   switch(control_mode) {
   case MODE_IDLE: i_stp.controller_mode = OpenHRP::StabilizerService::MODE_IDLE; break;
@@ -2171,6 +2172,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     tilt_margin[i] = i_stp.tilt_margin[i];
   }
   contact_decision_threshold = i_stp.contact_decision_threshold;
+  swing_collision_threshold = i_stp.swing_collision_threshold;
+  swing_collision_direction = i_stp.swing_collision_direction;
   is_estop_while_walking = i_stp.is_estop_while_walking;
   use_limb_stretch_avoidance = i_stp.use_limb_stretch_avoidance;
   limb_stretch_avoidance_time_const = i_stp.limb_stretch_avoidance_time_const;
@@ -2256,6 +2259,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   std::cerr << "[" << m_profile.instance_name << "]  cp_check_margin = [" << cp_check_margin[0] << ", " << cp_check_margin[1] << ", " << cp_check_margin[2] << ", " << cp_check_margin[3] << "] [m]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  tilt_margin = [" << tilt_margin[0] << ", " << tilt_margin[1] << "] [rad]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  contact_decision_threshold = " << contact_decision_threshold << "[N]" << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]  swing_collision_threshold = " << swing_collision_threshold << "[N] or [Nm]" << std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]  swing_collision_direction = " << swing_collision_direction <<  std::endl;
   // IK limb parameters
   std::cerr << "[" << m_profile.instance_name << "]  IK limb parameters" << std::endl;
   bool is_ik_limb_parameter_valid_length = true;

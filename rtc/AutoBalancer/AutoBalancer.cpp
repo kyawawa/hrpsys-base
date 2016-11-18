@@ -80,6 +80,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
       m_cogOut("cogOut", m_cog),
+      m_refZmpOut("refZmp", m_refZmp),
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
       gait_type(BIPED),
@@ -129,6 +130,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("toeheelRatio", m_toeheelRatioOut);
     addOutPort("controlSwingSupportTime", m_controlSwingSupportTimeOut);
     addOutPort("cogOut", m_cogOut);
+    addOutPort("refZmp", m_refZmpOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
 
@@ -607,6 +609,11 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_cog.data.y = ref_cog(1);
       m_cog.data.z = ref_cog(2);
       m_cog.tm = m_qRef.tm;
+      // ref zmp
+      m_refZmp.data.x = ref_zmp(0);
+      m_refZmp.data.y = ref_zmp(1);
+      m_refZmp.data.z = ref_zmp(2);
+      m_refZmp.tm = m_qRef.tm;
       // sbpCogOffset
       m_sbpCogOffset.data.x = sbp_cog_offset(0);
       m_sbpCogOffset.data.y = sbp_cog_offset(1);
@@ -619,6 +626,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     m_basePoseOut.write();
     m_zmpOut.write();
     m_cogOut.write();
+    m_refZmpOut.write();
     m_sbpCogOffsetOut.write();
 
     // reference acceleration

@@ -50,7 +50,7 @@ bool robot::init()
         pgain[i] = dgain[i] = 0.0;
         old_pgain[i] = old_dgain[i] = 0.0;
         default_pgain[i] = default_dgain[i] = 0.0;
-    } 
+    }
     loadGain();
     for (unsigned int i=0; i<numJoints(); i++){
         pgain[i] = default_pgain[i];
@@ -123,7 +123,7 @@ bool robot::loadGain()
 void robot::startInertiaSensorCalibration()
 {
     std::cerr << "[RobotHardware] startInertiaSensorCalibration..." << std::endl;
-    if (numSensors(Sensor::ACCELERATION)==0 
+    if (numSensors(Sensor::ACCELERATION)==0
         && numSensors(Sensor::RATE_GYRO)==0)  return;
 
     if (isBusy()) return;
@@ -191,7 +191,7 @@ void robot::calibrateInertiaSensorOneStep()
             for (int i=0; i<3; i++)
                 gyro_sum[j][i] += rate[i];
         }
-        
+
         for (unsigned int j=0; j<numSensors(Sensor::ACCELERATION); j++){
             double acc[3];
             read_accelerometer(j, acc);
@@ -290,7 +290,7 @@ void robot::oneStep()
     calibrateForceSensorOneStep();
     gain_control();
     if (m_calibRequested){
-        ::initializeJointAngle(m_calibJointName.c_str(), 
+        ::initializeJointAngle(m_calibJointName.c_str(),
                                m_calibOptions.c_str());
         m_calibRequested = false;
         sem_post(&wait_sem);
@@ -325,7 +325,7 @@ bool robot::servo(const char *jname, bool turnon)
 bool robot::servo(int jid, bool turnon)
 {
     if (jid == JID_INVALID || jid >= (int)numJoints()) return false;
-    
+
     int com = OFF;
 
     if (turnon) {
@@ -365,7 +365,7 @@ bool robot::power(const char *jname, bool turnon)
 bool robot::power(int jid, bool turnon)
 {
     if (jid == JID_INVALID || jid >= (int)numJoints()) return false;
-  
+
     int com = OFF;
 
     if (turnon) {
@@ -389,7 +389,7 @@ bool robot::power(int jid, bool turnon)
                 write_servo(i, com);
                 write_power_command(i, com);
             }
-        } else       
+        } else
             for (unsigned int i=0; i<numJoints(); i++)
                 write_power_command(i, com);
     } else {
@@ -417,7 +417,7 @@ bool robot::isBusy() const
         }
     }
 
-    return false; 
+    return false;
 }
 
 void robot::readJointAngles(double *o_angles)
@@ -546,20 +546,20 @@ bool robot::checkJointCommands(const double *i_commands)
             double v = (command - command_old)/m_dt;
             if (fabs(v) > joint(i)->uvlimit){
                 std::cerr << time_string()
-                          << ": joint command velocity limit over: joint = " 
+                          << ": joint command velocity limit over: joint = "
 		          << joint(i)->name
-		          << ", vlimit = " << joint(i)->uvlimit/M_PI*180 
-                          << "[deg/s], v = " 
+		          << ", vlimit = " << joint(i)->uvlimit/M_PI*180
+                          << "[deg/s], v = "
 		          << v/M_PI*180 << "[deg/s]" << std::endl;
                 return true;
             }
             double a = (v - m_velocityOld[i])/m_dt;
             if (m_accLimit && fabs(a) > m_accLimit){
                 std::cerr << time_string()
-                          << ": joint command acceleration limit over: joint = " 
+                          << ": joint command acceleration limit over: joint = "
 		          << joint(i)->name
-		          << ", alimit = " << m_accLimit/M_PI*180 
-                          << "[deg/s^2], v = " 
+		          << ", alimit = " << m_accLimit/M_PI*180
+                          << "[deg/s^2], v = "
 		          << a/M_PI*180 << "[deg/s^2]" << std::endl;
                 return true;
             }
@@ -579,9 +579,9 @@ bool robot::checkEmergency(emg_reason &o_reason, int &o_id)
             read_command_angle(i, &command);
             if (fabs(angle-command) > m_servoErrorLimit[i]){
                 std::cerr << time_string()
-                          << ": servo error limit over: joint = " 
+                          << ": servo error limit over: joint = "
 		          << joint(i)->name
-		          << ", qRef = " << command/M_PI*180 << "[deg], q = " 
+		          << ", qRef = " << command/M_PI*180 << "[deg], q = "
 		          << angle/M_PI*180 << "[deg]" << std::endl;
                 o_reason = EMG_SERVO_ERROR;
                 o_id = i;
@@ -599,7 +599,7 @@ bool robot::checkEmergency(emg_reason &o_reason, int &o_id)
             o_id = m_rLegForceSensorId;
             return true;
         }
-    } 
+    }
     if (m_lLegForceSensorId >= 0){
         double force[6];
         read_force_sensor(m_lLegForceSensorId, force);
@@ -609,7 +609,7 @@ bool robot::checkEmergency(emg_reason &o_reason, int &o_id)
             o_id = m_lLegForceSensorId;
             return true;
         }
-    } 
+    }
     int alarm;
     for (unsigned int i=0; i<numJoints(); i++){
         if (!read_servo_alarm(i, &alarm)) continue;
@@ -645,6 +645,11 @@ bool robot::checkEmergency(emg_reason &o_reason, int &o_id)
 
 bool robot::setServoGainPercentage(const char *i_jname, double i_percentage)
 {
+    return setServoGainPercentagePD(i_jname, i_percentage, true, true);
+}
+
+bool robot::setServoGainPercentagePD(const char *i_jname, double i_percentage, bool p, bool d)
+{
     if ( i_percentage < 0 || 100 < i_percentage ) {
         std::cerr << "[RobotHardware] Invalid percentage " <<  i_percentage << "[%] for setServoGainPercentage. Percentage should be in (0, 100)[%]." << std::endl;
         return false;
@@ -653,17 +658,17 @@ bool robot::setServoGainPercentage(const char *i_jname, double i_percentage)
     if (strcmp(i_jname, "all") == 0 || strcmp(i_jname, "ALL") == 0){
         for (unsigned int i=0; i<numJoints(); i++){
             if (!read_pgain(i, &old_pgain[i])) old_pgain[i] = pgain[i];
-            pgain[i] = default_pgain[i] * i_percentage/100.0;
+            if (p) pgain[i] = default_pgain[i] * i_percentage/100.0;
             if (!read_dgain(i, &old_dgain[i])) old_dgain[i] = dgain[i];
-            dgain[i] = default_dgain[i] * i_percentage/100.0;
+            if (d) dgain[i] = default_dgain[i] * i_percentage/100.0;
             gain_counter[i] = 0;
         }
         std::cerr << "[RobotHardware] setServoGainPercentage " << i_percentage << "[%] for all joints" << std::endl;
     }else if ((l = link(i_jname))){
         if (!read_pgain(l->jointId, &old_pgain[l->jointId])) old_pgain[l->jointId] = pgain[l->jointId];
-        pgain[l->jointId] = default_pgain[l->jointId] * i_percentage/100.0;
+        if (p) pgain[l->jointId] = default_pgain[l->jointId] * i_percentage/100.0;
         if (!read_dgain(l->jointId, &old_dgain[l->jointId])) old_dgain[l->jointId] = dgain[l->jointId];
-        dgain[l->jointId] = default_dgain[l->jointId] * i_percentage/100.0;
+        if (d) dgain[l->jointId] = default_dgain[l->jointId] * i_percentage/100.0;
         gain_counter[l->jointId] = 0;
         std::cerr << "[RobotHardware] setServoGainPercentage " << i_percentage << "[%] for " << i_jname << std::endl;
     }else{
@@ -672,9 +677,9 @@ bool robot::setServoGainPercentage(const char *i_jname, double i_percentage)
         if (jgroup.size()==0) return false;
         for (unsigned int i=0; i<jgroup.size(); i++){
             if (!read_pgain(jgroup[i], &old_pgain[jgroup[i]])) old_pgain[jgroup[i]] = pgain[jgroup[i]];
-            pgain[jgroup[i]] = default_pgain[jgroup[i]] * i_percentage/100.0;
+            if (p) pgain[jgroup[i]] = default_pgain[jgroup[i]] * i_percentage/100.0;
             if (!read_dgain(jgroup[i], &old_dgain[jgroup[i]])) old_dgain[jgroup[i]] = dgain[jgroup[i]];
-            dgain[jgroup[i]] = default_dgain[jgroup[i]] * i_percentage/100.0;
+            if (d) dgain[jgroup[i]] = default_dgain[jgroup[i]] * i_percentage/100.0;
             gain_counter[jgroup[i]] = 0;
         }
         std::cerr << "[RobotHardware] setServoGainPercentage " << i_percentage << "[%] for " << i_jname << std::endl;
@@ -723,14 +728,14 @@ void robot::setProperty(const char *i_key, const char *i_value)
     if (isKnownKey) std::cout << i_key << ": " << i_value << std::endl;
 }
 
-bool robot::names2ids(const std::vector<std::string> &i_names, 
+bool robot::names2ids(const std::vector<std::string> &i_names,
                             std::vector<int> &o_ids)
-{ 
+{
     bool ret = true;
     for (unsigned int i=0; i<i_names.size(); i++){
         Link *l = link(i_names[i].c_str());
         if (!l){
-            std::cout << "joint named [" << i_names[i] << "] not found" 
+            std::cout << "joint named [" << i_names[i] << "] not found"
                       << std::endl;
             ret = false;
         }else{
@@ -797,7 +802,7 @@ bool robot::readDigitalOutput(char *o_dout)
     return read_digital_output(o_dout);
 }
 
-void robot::readBatteryState(unsigned int i_rank, double &voltage, 
+void robot::readBatteryState(unsigned int i_rank, double &voltage,
                              double &current, double &soc)
 {
 #if defined(ROBOT_IOB_VERSION) && ROBOT_IOB_VERSION >= 2

@@ -126,6 +126,11 @@ void RobotHardwareService_impl::setServoGainPercentage(const char *jname, double
     m_robot->setServoGainPercentage(jname, percentage);
 }
 
+void RobotHardwareService_impl::setServoGainPercentagePD(const char *jname, double percentage, CORBA::Boolean p, CORBA::Boolean d)
+{
+    m_robot->setServoGainPercentagePD(jname, percentage, p, d);
+}
+
 void RobotHardwareService_impl::setServoErrorLimit(const char *jname, double limit)
 {
     m_robot->setServoErrorLimit(jname, limit);

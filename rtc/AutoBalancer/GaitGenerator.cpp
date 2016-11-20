@@ -600,6 +600,27 @@ namespace rats
       static hrp::Vector3 prev_diff_cp;
       double margin_time_ratio = 0.1;
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
+        // firstly solve preview control
+        hrp::Vector3 rzmp;
+        std::vector<hrp::Vector3> sfzos;
+        bool refzmp_exist_p = rg.get_current_refzmp(rzmp, sfzos, default_double_support_ratio_before, default_double_support_ratio_after, default_double_support_static_ratio_before, default_double_support_static_ratio_after);
+        if (!refzmp_exist_p) {
+          finalize_count++;
+          rzmp = prev_que_rzmp;
+          sfzos = prev_que_sfzos;
+        } else {
+          prev_que_rzmp = rzmp;
+          prev_que_sfzos = sfzos;
+        }
+        Eigen::Matrix<double, 3,2> current_x;
+        Eigen::Matrix<double, 4,2> current_x_e;
+        preview_controller_ptr->get_x_k(current_x);
+        preview_controller_ptr->get_x_k_e(current_x_e);
+        preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
+        // reset current state
+        preview_controller_ptr->set_x_k(current_x);
+        preview_controller_ptr->set_x_k_e(current_x_e);
+        // calculate sum of preview_f
         static double preview_f_sum;
         if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
           preview_f_sum = preview_controller_ptr->get_preview_f(preview_controller_ptr->get_delay());
@@ -610,6 +631,7 @@ namespace rats
         if (lcg.get_lcg_count() <= preview_controller_ptr->get_delay()) {
           preview_f_sum += preview_controller_ptr->get_preview_f(lcg.get_lcg_count());
         }
+        // calculate modified footstep position
         hrp::Vector3 d_footstep = (footstep_modification_gain[0] * diff_cp + footstep_modification_gain[1] * (diff_cp - prev_diff_cp)/dt) / preview_f_sum;
         d_footstep(2) = 0.0;
         // overwrite footsteps

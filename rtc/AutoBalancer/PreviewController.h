@@ -149,6 +149,14 @@ namespace rats
     {
         _qdata = qdata.front();
     };
+    void get_x_k (Eigen::Matrix<double, 3, 2>& _x_k)
+    {
+      _x_k = x_k;
+    };
+    void set_x_k (const Eigen::Matrix<double, 3, 2>& _x_k)
+    {
+      x_k = _x_k;
+    };
     bool is_doing () { return p.size() >= 1 + delay; };
     bool is_end () { return ending_count <= 0 ; };
     void remove_preview_queue(const size_t remain_length)
@@ -199,7 +207,6 @@ namespace rats
     Eigen::Matrix<double, 4, 2> x_k_e;
     void calc_f();
     void calc_u();
-    void calc_x_k();
   public:
     extended_preview_control(const double dt, const double zc,
                              const hrp::Vector3& init_xk, const double _gravitational_acceleration = DEFAULT_GRAVITATIONAL_ACCELERATION, const double q = 1.0,
@@ -223,6 +230,15 @@ namespace rats
       x_k_e(0,0) = init_xk(0);
       x_k_e(0,1) = init_xk(1);
       init_riccati(A, b, c, q, r);
+    };
+    void calc_x_k();
+    void get_x_k_e(Eigen::Matrix<double, 4,2>& _x_k_e)
+    {
+      _x_k_e = x_k_e;
+    };
+    void set_x_k_e(const Eigen::Matrix<double, 4,2>& _x_k_e)
+    {
+      x_k_e = _x_k_e;
     };
     virtual ~extended_preview_control() {};
   };
@@ -256,6 +272,22 @@ namespace rats
       }
       return flg;
     };
+    void reupdate(hrp::Vector3& p_ret, hrp::Vector3& x_ret, const bool updatep)
+    {
+      bool flg;
+      if (updatep) {
+        preview_controller.calc_x_k();
+        flg = preview_controller.is_doing();
+      } else {
+        if ( !preview_controller.is_end() )
+          preview_controller.update_x_k();
+        flg = !preview_controller.is_end();
+      }
+      if (flg) {
+        preview_controller.get_current_refzmp(p_ret.data());
+        preview_controller.get_refcog(x_ret.data());
+      }
+    };
     void remove_preview_queue(const size_t remain_length)
     {
       preview_controller.remove_preview_queue(remain_length);
@@ -276,6 +308,10 @@ namespace rats
     //void get_current_qdata (double* ret) { preview_controller.get_current_qdata(ret);}
     size_t get_delay () { return preview_controller.get_delay(); };
     double get_preview_f (const size_t idx) { return preview_controller.get_preview_f(idx); };
+    void get_x_k(Eigen::Matrix<double, 3,2>& _x_k) { preview_controller.get_x_k(_x_k); };
+    void set_x_k(const Eigen::Matrix<double, 3,2>& _x_k) { preview_controller.set_x_k(_x_k); };
+    void get_x_k_e(Eigen::Matrix<double, 4,2>& _x_k_e) { preview_controller.get_x_k_e(_x_k_e); };
+    void set_x_k_e(const Eigen::Matrix<double, 4,2>& _x_k_e) { preview_controller.set_x_k_e(_x_k_e); };
   };
 }
 #endif /*PREVIEW_H_*/

@@ -397,8 +397,10 @@ class HrpsysConfigurator(object):
                 connectPorts(self.st.port("emergencySignal"), self.es.port("emergencySignal"))
                 connectPorts(self.st.port("emergencySignalWalking"), self.abc.port("emergencySignalWalking"))
             connectPorts(self.st.port("emergencySignal"), self.abc.port("emergencySignal"))
-            connectPorts(self.st.port("absRefCapturePoint"), self.abc.port("absRefCapturePoint"))
-            connectPorts(self.st.port("absActCapturePoint"), self.abc.port("absActCapturePoint"))
+            connectPorts(self.st.port("absActCOG"), self.abc.port("absActCOG"))
+            connectPorts(self.st.port("absActCOGVel"), self.abc.port("absActCOGVel"))
+            connectPorts(self.st.port("absRefCOG"), self.abc.port("absRefCOG"))
+            connectPorts(self.st.port("absRefCOGVel"), self.abc.port("absRefCOGVel"))
             connectPorts(self.st.port("actContactStates"), self.abc.port("actContactStates"))
 
         # ref force moment connection

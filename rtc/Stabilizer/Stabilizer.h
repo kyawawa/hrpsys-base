@@ -159,8 +159,10 @@ class Stabilizer
   RTC::TimedPoint3D m_zmp;
   RTC::TimedPoint3D m_refCP;
   RTC::TimedPoint3D m_actCP;
-  RTC::TimedPoint3D m_absRefCP;
-  RTC::TimedPoint3D m_absActCP;
+  RTC::TimedPoint3D m_absActCOG;
+  RTC::TimedPoint3D m_absActCOGVel;
+  RTC::TimedPoint3D m_absRefCOG;
+  RTC::TimedPoint3D m_absRefCOGVel;
   RTC::TimedPoint3D m_basePos;
   RTC::TimedOrientation3D m_baseRpy;
   RTC::TimedBooleanSeq m_contactStates;
@@ -214,8 +216,10 @@ class Stabilizer
   RTC::OutPort<RTC::TimedPoint3D> m_zmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_refCPOut;
   RTC::OutPort<RTC::TimedPoint3D> m_actCPOut;
-  RTC::OutPort<RTC::TimedPoint3D> m_absRefCPOut;
-  RTC::OutPort<RTC::TimedPoint3D> m_absActCPOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absActCOGOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absActCOGVelOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absRefCOGOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absRefCOGVelOut;
   RTC::OutPort<RTC::TimedBooleanSeq> m_actContactStatesOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_COPInfoOut;
   RTC::OutPort<RTC::TimedLong> m_emergencySignalOut;
@@ -297,8 +301,8 @@ class Stabilizer
   std::vector <hrp::Matrix33> target_ee_R, rel_ee_rot, act_ee_R;
   std::vector<std::string> rel_ee_name;
   rats::coordinates target_foot_midcoords;
-  hrp::Vector3 ref_zmp, ref_cog, ref_cp, ref_cogvel, rel_ref_cp, abs_ref_cp, prev_ref_cog, prev_ref_zmp;
-  hrp::Vector3 act_zmp, act_cog, act_cogvel, act_cp, rel_act_zmp, rel_act_cp, abs_act_cp, prev_act_cog, act_base_rpy, current_base_rpy, current_base_pos, sbp_cog_offset, cp_offset;
+  hrp::Vector3 ref_zmp, ref_cog, abs_ref_cog, ref_cp, ref_cogvel, abs_ref_cogvel, rel_ref_cp, prev_ref_cog, prev_ref_zmp;
+  hrp::Vector3 act_zmp, act_cog, abs_act_cog, act_cogvel, abs_act_cogvel, act_cp, rel_act_zmp, rel_act_cp, prev_act_cog, act_base_rpy, current_base_rpy, current_base_pos, sbp_cog_offset, cp_offset;
   hrp::Vector3 foot_origin_offset[2];
   std::vector<double> prev_act_force_z;
   double zmp_origin_off, transition_smooth_gain, d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];

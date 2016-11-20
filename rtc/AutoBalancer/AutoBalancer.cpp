@@ -61,8 +61,10 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_optionalDataIn("optionalData", m_optionalData),
       m_emergencySignalIn("emergencySignal", m_emergencySignal),
       m_emergencySignalWalkingIn("emergencySignalWalking", m_emergencySignalWalking),
-      m_absActCPIn("absActCapturePoint", m_absActCP),
-      m_absRefCPIn("absRefCapturePoint", m_absRefCP),
+      m_absActCOGIn("absActCOG", m_absActCOG),
+      m_absActCOGVelIn("absActCOGVel", m_absActCOGVel),
+      m_absRefCOGIn("absRefCOG", m_absRefCOG),
+      m_absRefCOGVelIn("absRefCOGVel", m_absRefCOGVel),
       m_actContactStatesIn("actContactStates", m_actContactStates),
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
@@ -107,8 +109,10 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addInPort("optionalData", m_optionalDataIn);
     addInPort("emergencySignal", m_emergencySignalIn);
     addInPort("emergencySignalWalking", m_emergencySignalWalkingIn);
-    addInPort("absActCapturePoint", m_absActCPIn);
-    addInPort("absRefCapturePoint", m_absRefCPIn);
+    addInPort("absActCOG", m_absActCOGIn);
+    addInPort("absActCOGVel", m_absActCOGVelIn);
+    addInPort("absRefCOG", m_absRefCOGIn);
+    addInPort("absRefCOGVel", m_absRefCOGVelIn);
     addInPort("actContactStates", m_actContactStatesIn);
 
     // Set OutPort buffer
@@ -372,7 +376,6 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     if (sen == NULL) {
         std::cerr << "[" << m_profile.instance_name << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! " << std::endl;
     }
-    diff_cp = hrp::Vector3(0.0, 0.0, 0.0);
     act_contact_states.resize(2, false);
 
     return RTC::RTC_OK;
@@ -482,12 +485,21 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_emergencySignalWalkingIn.read();
       gg->set_is_emergency_walking(m_emergencySignalWalking.data);
     }
-    if (m_absActCPIn.isNew() && m_absRefCPIn.isNew()) {
-      m_absActCPIn.read();
-      m_absRefCPIn.read();
-      diff_cp(0) = m_absRefCP.data.x - m_absActCP.data.x;
-      diff_cp(1) = m_absRefCP.data.y - m_absActCP.data.y;
-      diff_cp(2) = m_absRefCP.data.z - m_absActCP.data.z;
+    if (m_absActCOGIn.isNew()) {
+      m_absActCOGIn.read();
+      gg->set_act_cog(hrp::Vector3(m_absActCOG.data.x, m_absActCOG.data.y, m_absActCOG.data.z));
+    }
+    if (m_absActCOGVelIn.isNew()) {
+      m_absActCOGVelIn.read();
+      gg->set_act_cogvel(hrp::Vector3(m_absActCOG.data.x, m_absActCOG.data.y, m_absActCOG.data.z));
+    }
+    if (m_absRefCOGIn.isNew()) {
+      m_absRefCOGIn.read();
+      gg->set_ref_cog(hrp::Vector3(m_absRefCOG.data.x, m_absRefCOG.data.y, m_absRefCOG.data.z));
+    }
+    if (m_absRefCOGVelIn.isNew()) {
+      m_absRefCOGVelIn.read();
+      gg->set_ref_cogvel(hrp::Vector3(m_absRefCOG.data.x, m_absRefCOG.data.y, m_absRefCOG.data.z));
     }
     if (m_actContactStatesIn.isNew()) {
       m_actContactStatesIn.read();
@@ -685,7 +697,7 @@ void AutoBalancer::getTargetParameters()
     }
     if ( gg_is_walking ) {
       gg->set_default_zmp_offsets(default_zmp_offsets);
-      gg_solved = gg->proc_one_tick(diff_cp, act_contact_states);
+      gg_solved = gg->proc_one_tick(act_contact_states);
       {
           std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
           coordinates tmpc;
@@ -1168,7 +1180,7 @@ void AutoBalancer::startWalking ()
     gg->initialize_gait_parameter(ref_cog, init_support_leg_steps, init_swing_leg_dst_steps);
   }
   is_hand_fix_initial = true;
-  while ( !gg->proc_one_tick(diff_cp, act_contact_states) );
+  while ( !gg->proc_one_tick(act_contact_states) );
   {
     Guard guard(m_mutex);
     gg_is_walking = gg_solved = true;

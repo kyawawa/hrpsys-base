@@ -552,7 +552,7 @@ namespace rats
     emergency_flg = IDLING;
   };
 
-  bool gait_generator::proc_one_tick (const hrp::Vector3& diff_cp, const std::vector<bool>& contact_states)
+  bool gait_generator::proc_one_tick (const std::vector<bool>& contact_states)
   {
     solved = false;
     /* update refzmp */
@@ -596,9 +596,13 @@ namespace rats
       }
     }
     // modify footsteps based on diff_cp
-    if (modify_footsteps && isfinite(diff_cp(0)) && isfinite(diff_cp(1))) {
-      static hrp::Vector3 prev_diff_cp;
+    if (modify_footsteps && isfinite(act_cog(0)) && isfinite(act_cogvel(0))) {
       double margin_time_ratio = 0.1;
+      // calculate diff_cp
+      hrp::Vector3 ref_cp, act_cp;
+      double omega = std::sqrt(gravitational_acceleration / cog(2) - refzmp(2));
+      ref_cp = ref_cog + ref_cogvel / omega;
+      act_cp = act_cog + act_cogvel / omega;
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
         // firstly solve preview control
         hrp::Vector3 rzmp;
@@ -612,14 +616,14 @@ namespace rats
           prev_que_rzmp = rzmp;
           prev_que_sfzos = sfzos;
         }
-        Eigen::Matrix<double, 3,2> current_x;
-        Eigen::Matrix<double, 4,2> current_x_e;
-        preview_controller_ptr->get_x_k(current_x);
-        preview_controller_ptr->get_x_k_e(current_x_e);
+        Eigen::Matrix<double, 3,2> current_x_k;
+        Eigen::Matrix<double, 4,2> current_x_k_e;
+        preview_controller_ptr->get_x_k(current_x_k);
+        preview_controller_ptr->get_x_k_e(current_x_k_e);
         preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
         // reset current state
-        preview_controller_ptr->set_x_k(current_x);
-        preview_controller_ptr->set_x_k_e(current_x_e);
+        preview_controller_ptr->set_x_k(current_x_k);
+        preview_controller_ptr->set_x_k_e(current_x_k_e);
         // calculate sum of preview_f
         static double preview_f_sum;
         if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
@@ -632,7 +636,8 @@ namespace rats
           preview_f_sum += preview_controller_ptr->get_preview_f(lcg.get_lcg_count());
         }
         // calculate modified footstep position
-        hrp::Vector3 d_footstep = (footstep_modification_gain[0] * diff_cp + footstep_modification_gain[1] * (diff_cp - prev_diff_cp)/dt) / preview_f_sum;
+        // hrp::Vector3 d_footstep = (footstep_modification_gain[0] * diff_cp + footstep_modification_gain[1] * (diff_cp - prev_diff_cp)/dt) / preview_f_sum;
+        hrp::Vector3 d_footstep = (footstep_modification_gain[0] * (ref_cp - act_cp)) / preview_f_sum;
         d_footstep(2) = 0.0;
         // overwrite footsteps
         if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&
@@ -654,7 +659,6 @@ namespace rats
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
       }
-      prev_diff_cp = diff_cp;
     }
     // limit stride
     if (use_stride_limitation && lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-overwritable_footstep_index_offset-2 &&

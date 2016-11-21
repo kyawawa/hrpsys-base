@@ -161,6 +161,8 @@ class Stabilizer
   RTC::TimedPoint3D m_zmp;
   RTC::TimedPoint3D m_refCP;
   RTC::TimedPoint3D m_actCP;
+  RTC::TimedPoint3D m_absRefCP;
+  RTC::TimedPoint3D m_absActCP;
   RTC::TimedPoint3D m_basePos;
   RTC::TimedOrientation3D m_baseRpy;
   RTC::TimedBooleanSeq m_contactStates;
@@ -171,6 +173,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_COPInfo;
   RTC::TimedLong m_emergencySignal;
   RTC::TimedBoolean m_walkingStopSignal;
+  RTC::TimedBoolean m_emergencySignalWalking;
   RTC::TimedDoubleSeq m_qRefSeq;
   RTC::TimedBoolean m_walkingStates;
   RTC::TimedPoint3D m_sbpCogOffset;
@@ -214,10 +217,13 @@ class Stabilizer
   RTC::OutPort<RTC::TimedPoint3D> m_zmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_refCPOut;
   RTC::OutPort<RTC::TimedPoint3D> m_actCPOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absRefCPOut;
+  RTC::OutPort<RTC::TimedPoint3D> m_absActCPOut;
   RTC::OutPort<RTC::TimedBooleanSeq> m_actContactStatesOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_COPInfoOut;
   RTC::OutPort<RTC::TimedLong> m_emergencySignalOut;
   RTC::OutPort<RTC::TimedBoolean> m_walkingStopSignalOut;
+  RTC::OutPort<RTC::TimedBoolean> m_emergencySignalWalkingOut;
   // for debug output
   RTC::OutPort<RTC::TimedPoint3D> m_originRefZmpOut, m_originRefCogOut, m_originRefCogVelOut, m_originNewZmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_originActZmpOut, m_originActCogOut, m_originActCogVelOut;
@@ -285,16 +291,16 @@ class Stabilizer
   std::vector<double> toeheel_ratio;
   double dt;
   int transition_count, loop;
-  bool is_legged_robot, on_ground, is_emergency, is_walking_emergency, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance;
+  bool is_legged_robot, on_ground, is_emergency, is_walking_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance;
   bool is_walking, is_estop_while_walking;
-  hrp::Vector3 current_root_p, target_root_p;
-  hrp::Matrix33 current_root_R, target_root_R, prev_act_foot_origin_rot, prev_ref_foot_origin_rot, target_foot_origin_rot;
+  hrp::Vector3 current_root_p, target_root_p, ref_foot_origin_pos;
+  hrp::Matrix33 current_root_R, target_root_R, prev_act_foot_origin_rot, prev_ref_foot_origin_rot, target_foot_origin_rot, ref_foot_origin_rot;
   std::vector <hrp::Vector3> target_ee_p, rel_ee_pos, act_ee_p, projected_normal, act_force;
   std::vector <hrp::Matrix33> target_ee_R, rel_ee_rot, act_ee_R;
   std::vector<std::string> rel_ee_name;
   rats::coordinates target_foot_midcoords;
-  hrp::Vector3 ref_zmp, ref_cog, ref_cp, ref_cogvel, rel_ref_cp, prev_ref_cog, prev_ref_zmp;
-  hrp::Vector3 act_zmp, act_cog, act_cogvel, act_cp, rel_act_zmp, rel_act_cp, prev_act_cog, act_base_rpy, current_base_rpy, current_base_pos, sbp_cog_offset;
+  hrp::Vector3 ref_zmp, ref_cog, ref_cp, ref_cogvel, rel_ref_cp, abs_ref_cp, prev_ref_cog, prev_ref_zmp;
+  hrp::Vector3 act_zmp, act_cog, act_cogvel, act_cp, rel_act_zmp, rel_act_cp, abs_act_cp, prev_act_cog, act_base_rpy, current_base_rpy, current_base_pos, sbp_cog_offset, cp_offset;
   hrp::Vector3 foot_origin_offset[2];
   std::vector<double> prev_act_force_z;
   double zmp_origin_off, transition_smooth_gain, d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];
@@ -320,7 +326,7 @@ class Stabilizer
   double total_mass, transition_time, cop_check_margin, contact_decision_threshold;
   double swing_collision_threshold;
   int swing_collision_direction;
-  std::vector<double> cp_check_margin, tilt_margin;
+  std::vector<double> cp_check_margin, cp_check_margin_while_walking, tilt_margin;
   OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
 };
 

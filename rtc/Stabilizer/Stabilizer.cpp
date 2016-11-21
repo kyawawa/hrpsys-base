@@ -60,10 +60,13 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_zmpOut("zmp", m_zmp),
     m_refCPOut("refCapturePoint", m_refCP),
     m_actCPOut("actCapturePoint", m_actCP),
+    m_absRefCPOut("absRefCapturePoint", m_absRefCP),
+    m_absActCPOut("absActCapturePoint", m_absActCP),
     m_actContactStatesOut("actContactStates", m_actContactStates),
     m_COPInfoOut("COPInfo", m_COPInfo),
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
     m_walkingStopSignalOut("walkingStopSignal", m_walkingStopSignal),
+    m_emergencySignalWalkingOut("emergencySignalWalking", m_emergencySignalWalking),
     // for debug output
     m_originRefZmpOut("originRefZmp", m_originRefZmp),
     m_originRefCogOut("originRefCog", m_originRefCog),
@@ -123,10 +126,13 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("zmp", m_zmpOut);
   addOutPort("refCapturePoint", m_refCPOut);
   addOutPort("actCapturePoint", m_actCPOut);
+  addOutPort("absRefCapturePoint", m_absRefCPOut);
+  addOutPort("absActCapturePoint", m_absActCPOut);
   addOutPort("actContactStates", m_actContactStatesOut);
   addOutPort("COPInfo", m_COPInfoOut);
   addOutPort("emergencySignal", m_emergencySignalOut);
   addOutPort("walkingStopSignal", m_walkingStopSignalOut);
+  addOutPort("emergencySignalWalking", m_emergencySignalWalkingOut);
   // for debug output
   addOutPort("originRefZmp", m_originRefZmpOut);
   addOutPort("originRefCog", m_originRefCogOut);
@@ -373,6 +379,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   eefm_ee_rot_error_p_gain = 0;
   cop_check_margin = 20.0*1e-3; // [m]
   cp_check_margin.resize(4, 30*1e-3); // [m]
+  cp_check_margin_while_walking.resize(4, 30*1e-3); // [m]
   tilt_margin.resize(2, 30 * M_PI / 180); // [rad]
   contact_decision_threshold = 50; // [N]
   eefm_use_force_difference_control = true;
@@ -387,6 +394,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   limb_stretch_avoidance_time_const = 1.5;
   limb_stretch_avoidance_vlimit[0] = -100 * 1e-3 * dt; // lower limit
   limb_stretch_avoidance_vlimit[1] = 50 * 1e-3 * dt; // upper limit
+  cp_offset = hrp::Vector3(0.0, 0.0, 0.0);
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -413,6 +421,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   is_walking_emergency = false;
   swing_collision_threshold = 160;
   swing_collision_direction = 0;
+  is_emergency_while_walking = false;
   reset_emergency_flag = false;
 
   m_qCurrent.data.length(m_robot->numJoints());
@@ -641,6 +650,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_actCP.data.z = rel_act_cp(2);
       m_actCP.tm = m_qRef.tm;
       m_actCPOut.write();
+      m_absActCP.data.x = abs_act_cp(0);
+      m_absActCP.data.y = abs_act_cp(1);
+      m_absActCP.data.z = abs_act_cp(2);
+      m_absActCP.tm = m_qRef.tm;
+      m_absActCPOut.write();
+      m_absRefCP.data.x = abs_ref_cp(0);
+      m_absRefCP.data.y = abs_ref_cp(1);
+      m_absRefCP.data.z = abs_ref_cp(2);
+      m_absRefCP.tm = m_qRef.tm;
+      m_absRefCPOut.write();
       m_actContactStates.tm = m_qRef.tm;
       m_actContactStatesOut.write();
       m_COPInfo.tm = m_qRef.tm;
@@ -712,6 +731,10 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     } else if (is_walking_emergency) {
       walkingEmergencyStop();
     }
+    // emergencySignalWalking
+    m_emergencySignalWalking.tm = m_qRef.tm;
+    m_emergencySignalWalking.data = is_emergency_while_walking;
+    m_emergencySignalWalkingOut.write();
   }
 
   return RTC::RTC_OK;
@@ -833,9 +856,11 @@ void Stabilizer::getActualParameters ()
       act_ee_R[i] = foot_origin_rot.transpose() * (target->R * stikp[i].localR);
     }
     // capture point
-    act_cp = act_cog + act_cogvel / std::sqrt(eefm_gravitational_acceleration / (act_cog - act_zmp)(2));
+    act_cp = act_cog + act_cogvel * std::sqrt(std::max(0.0, (act_cog - act_zmp)(2)) / eefm_gravitational_acceleration);
+    act_cp = hrp::Vector3(act_cp(0) + cp_offset(0), act_cp(1) + cp_offset(1), act_cp(2));
     rel_act_cp = hrp::Vector3(act_cp(0), act_cp(1), act_zmp(2));
     rel_act_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_act_cp) - m_robot->rootLink()->p);
+    abs_act_cp = ref_foot_origin_pos + ref_foot_origin_rot * act_cp;
     // <= Actual foot_origin frame
 
     // Actual world frame =>
@@ -1174,16 +1199,18 @@ void Stabilizer::getTargetParameters ()
     } else {
       ref_cogvel = (ref_cog - prev_ref_cog)/dt;
     }
-    prev_ref_foot_origin_rot = foot_origin_rot;
+    ref_foot_origin_pos = foot_origin_pos;
+    prev_ref_foot_origin_rot = ref_foot_origin_rot = foot_origin_rot;
     for (size_t i = 0; i < stikp.size(); i++) {
       stikp[i].target_ee_diff_p = foot_origin_rot.transpose() * (target_ee_p[i] - foot_origin_pos);
       stikp[i].target_ee_diff_r = foot_origin_rot.transpose() * target_ee_R[i];
     }
     target_foot_origin_rot = foot_origin_rot;
     // capture point
-    ref_cp = ref_cog + ref_cogvel / std::sqrt(eefm_gravitational_acceleration / (ref_cog - ref_zmp)(2));
+    ref_cp = ref_cog + ref_cogvel * std::sqrt(std::max(0.0, (ref_cog - ref_zmp)(2)) / eefm_gravitational_acceleration);
     rel_ref_cp = hrp::Vector3(ref_cp(0), ref_cp(1), ref_zmp(2));
     rel_ref_cp = m_robot->rootLink()->R.transpose() * ((foot_origin_pos + foot_origin_rot * rel_ref_cp) - m_robot->rootLink()->p);
+    abs_ref_cp = ref_foot_origin_pos + ref_foot_origin_rot * ref_cp;
     sbp_cog_offset = foot_origin_rot.transpose() * sbp_cog_offset;
     // <= Reference foot_origin frame
   } else {
@@ -1269,7 +1296,7 @@ void Stabilizer::calcStateForEmergencySignal()
     is_cop_outside = false;
   }
   // CP Check
-  bool is_cp_outside = false;
+  bool is_cp_outside = false, is_cp_outside_while_walking = false;
   if (on_ground && transition_count == 0 && control_mode == MODE_ST) {
     SimpleZMPDistributor::leg_type support_leg;
     size_t l_idx, r_idx;
@@ -1285,6 +1312,23 @@ void Stabilizer::calcStateForEmergencySignal()
     else if (isContact(contact_states_index_map["rleg"])) support_leg = SimpleZMPDistributor::RLEG;
     else if (isContact(contact_states_index_map["lleg"])) support_leg = SimpleZMPDistributor::LLEG;
     if (!is_walking || is_estop_while_walking) is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset);
+    if (is_walking) {
+      switch (support_leg) {
+      case SimpleZMPDistributor::BOTH:
+        is_cp_outside_while_walking = (act_cp(0) - ref_cp(0) > cp_check_margin_while_walking[0]) || (act_cp(0) - ref_cp(0) < -1 * cp_check_margin_while_walking[1]) ||
+          (act_cp(1) - ref_cp(1) > cp_check_margin_while_walking[3]) || (act_cp(1) - ref_cp(1) < -1 * cp_check_margin_while_walking[3]);
+        break;
+      case SimpleZMPDistributor::RLEG:
+        is_cp_outside_while_walking = (act_cp(0) - ref_cp(0) > cp_check_margin_while_walking[0]) || (act_cp(0) - ref_cp(0) < -1 * cp_check_margin_while_walking[1]) ||
+          (act_cp(1) - ref_cp(1) > cp_check_margin_while_walking[2]) || (act_cp(1) - ref_cp(1) < -1 * cp_check_margin_while_walking[3]);
+        break;
+      case SimpleZMPDistributor::LLEG:
+        is_cp_outside_while_walking = (act_cp(0) - ref_cp(0) > cp_check_margin_while_walking[0]) || (act_cp(0) - ref_cp(0) < -1 * cp_check_margin_while_walking[1]) ||
+          (act_cp(1) - ref_cp(1) > cp_check_margin_while_walking[3]) || (act_cp(1) - ref_cp(1) < -1 * cp_check_margin_while_walking[2]);
+        break;
+      default: break;
+      }
+    }
     if (DEBUGP) {
       std::cerr << "[" << m_profile.instance_name << "] CP value " << "[" << act_cp(0) << "," << act_cp(1) << "] [m], "
                 << "sbp cog offset [" << sbp_cog_offset(0) << " " << sbp_cog_offset(1) << "], outside ? "
@@ -1356,6 +1400,7 @@ void Stabilizer::calcStateForEmergencySignal()
       break;
   case OpenHRP::StabilizerService::CP:
       is_emergency = is_cp_outside;
+      is_emergency_while_walking = is_cp_outside_while_walking;
       break;
   case OpenHRP::StabilizerService::TILT:
       is_emergency = will_fall | is_falling;
@@ -1786,6 +1831,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.eefm_body_attitude_control_gain[i] = eefm_body_attitude_control_gain[i];
     i_stp.ref_capture_point[i] = ref_cp(i);
     i_stp.act_capture_point[i] = act_cp(i);
+    i_stp.cp_offset[i] = cp_offset(i);
   }
   i_stp.eefm_pos_time_const_support.length(stikp.size());
   i_stp.eefm_pos_damping_gain.length(stikp.size());
@@ -1887,6 +1933,9 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   for (size_t i = 0; i < cp_check_margin.size(); i++) {
     i_stp.cp_check_margin[i] = cp_check_margin[i];
   }
+  for (size_t i = 0; i < cp_check_margin_while_walking.size(); i++) {
+    i_stp.cp_check_margin_while_walking[i] = cp_check_margin_while_walking[i];
+  }
   for (size_t i = 0; i < tilt_margin.size(); i++) {
     i_stp.tilt_margin[i] = tilt_margin[i];
   }
@@ -1986,6 +2035,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     eefm_body_attitude_control_time_const[i] = i_stp.eefm_body_attitude_control_time_const[i];
     ref_cp(i) = i_stp.ref_capture_point[i];
     act_cp(i) = i_stp.act_capture_point[i];
+    cp_offset(i) = i_stp.cp_offset[i];
   }
   bool is_damping_parameter_ok = true;
   if ( i_stp.eefm_pos_damping_gain.length () == stikp.size() &&
@@ -2076,6 +2126,9 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   cop_check_margin = i_stp.cop_check_margin;
   for (size_t i = 0; i < cp_check_margin.size(); i++) {
     cp_check_margin[i] = i_stp.cp_check_margin[i];
+  }
+  for (size_t i = 0; i < cp_check_margin_while_walking.size(); i++) {
+    cp_check_margin_while_walking[i] = i_stp.cp_check_margin_while_walking[i];
   }
   for (size_t i = 0; i < tilt_margin.size(); i++) {
     tilt_margin[i] = i_stp.tilt_margin[i];

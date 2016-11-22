@@ -649,18 +649,19 @@ namespace rats
     // modify footsteps based on diff_cp
     if (modify_footsteps && isfinite(act_cog(0)) && isfinite(act_cogvel(0))) {
       double margin_time_ratio = 0.1;
+      static hrp::Vector3 prev_ref_cog, prev_act_cog, prev_ref_cogvel, prev_act_cogvel;
+      hrp::Vector3 ref_cp, act_cp, tmp_diff_cp, next_diff_cp;
       // calculate diff_cp
-      hrp::Vector3 ref_cp, act_cp, tmp_diff_cp;
-      ref_cp = ref_cog + ref_cogvel / std::sqrt(gravitational_acceleration / (ref_cog(2) - refzmp(2)));
-      act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
-      for (size_t i = 0; i < 2; i++) {
-        if (std::fabs((ref_cp - act_cp)(i)) > cp_check_margin[i]) {
-          is_emergency_walking[i] = true;
-          tmp_diff_cp(i) = (ref_cp - act_cp)(i) - cp_check_margin[i] * (ref_cp - act_cp)(i)/std::fabs((ref_cp - act_cp)(i));
-        } else {
-          is_emergency_walking[i] = false;
-        }
-      }
+      // ref_cp = ref_cog + ref_cogvel / std::sqrt(gravitational_acceleration / (ref_cog(2) - refzmp(2)));
+      // act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
+      // for (size_t i = 0; i < 2; i++) {
+      //   if (std::fabs((ref_cp - act_cp)(i)) > cp_check_margin[i]) {
+      //     is_emergency_walking[i] = true;
+      //     tmp_diff_cp(i) = (ref_cp - act_cp)(i) - cp_check_margin[i] * (ref_cp - act_cp)(i)/std::fabs((ref_cp - act_cp)(i));
+      //   } else {
+      //     is_emergency_walking[i] = false;
+      //   }
+      // }
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
         // firstly solve preview control
         hrp::Vector3 rzmp;
@@ -676,9 +677,50 @@ namespace rats
         }
         Eigen::Matrix<double, 3,2> current_x_k;
         Eigen::Matrix<double, 4,2> current_x_k_e;
+        Eigen::Matrix<double, 4,2> tmp_current_x_k_e;
+        Eigen::Matrix<double, 3,2> tmp_current_x_k;
+        Eigen::Matrix<double, 3,2> next_ref_x_k;
+        Eigen::Matrix<double, 3,2> next_act_x_k;
         preview_controller_ptr->get_x_k(current_x_k);
         preview_controller_ptr->get_x_k_e(current_x_k_e);
+        // solve next ref state
+        tmp_current_x_k = current_x_k;
+        tmp_current_x_k_e = current_x_k_e;
+        for (size_t i = 0; i < 2; i++) {
+          tmp_current_x_k(0,i) = ref_cog(i);
+          tmp_current_x_k(1,i) = ref_cogvel(i);
+          tmp_current_x_k_e(1,i) = ref_cog(i) - prev_ref_cog(i);
+          tmp_current_x_k_e(2,i) = ref_cogvel(i) - prev_ref_cogvel(i);
+        }
+        preview_controller_ptr->set_x_k(tmp_current_x_k);
+        preview_controller_ptr->set_x_k_e(tmp_current_x_k_e);
         preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
+        preview_controller_ptr->get_x_k(next_ref_x_k);
+        // solve next act state
+        tmp_current_x_k = current_x_k;
+        tmp_current_x_k_e = current_x_k_e;
+        for (size_t i = 0; i < 2; i++) {
+          tmp_current_x_k(0,i) = act_cog(i);
+          tmp_current_x_k(1,i) = act_cogvel(i);
+          tmp_current_x_k_e(1,i) = act_cog(i) - prev_act_cog(i);
+          tmp_current_x_k_e(2,i) = act_cogvel(i) - prev_act_cogvel(i);
+        }
+        preview_controller_ptr->set_x_k(tmp_current_x_k);
+        preview_controller_ptr->set_x_k_e(tmp_current_x_k_e);
+        preview_controller_ptr->reupdate(refzmp, cog, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
+        preview_controller_ptr->get_x_k(next_act_x_k);
+        // calculate next diff cp
+        hrp::Vector3 next_ref_cp, next_act_cp;
+        for (size_t i = 0; i < 2; i++) {
+          next_ref_cp(i) = next_ref_x_k(0,i) + next_ref_x_k(1,i) / std::sqrt(gravitational_acceleration / (ref_cog(2) - refzmp(2)));
+          next_act_cp(i) = next_act_x_k(0,i) + next_act_x_k(1,i) / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
+          if (std::fabs((next_ref_cp - next_act_cp)(i)) > cp_check_margin[i]) {
+            is_emergency_walking[i] = true;
+            tmp_diff_cp(i) = (next_ref_cp - next_act_cp)(i) - cp_check_margin[i] * (next_ref_cp - next_act_cp)(i)/std::fabs((next_ref_cp - next_act_cp)(i));
+          } else {
+            is_emergency_walking[i] = false;
+          }
+        }
         // reset current state
         preview_controller_ptr->set_x_k(current_x_k);
         preview_controller_ptr->set_x_k_e(current_x_k_e);
@@ -695,7 +737,7 @@ namespace rats
         }
         // calculate modified footstep position
         double preview_db = 1/6.0 * dt * dt * dt + 1/2.0 * dt * dt * 1/std::sqrt(gravitational_acceleration / (cog(2) - refzmp(2)));
-        hrp::Vector3 d_footstep = -1/preview_f_sum * 1/preview_db * tmp_diff_cp;
+        hrp::Vector3 d_footstep = -1/preview_f_sum * 1/preview_db * footstep_modification_gain[0] * tmp_diff_cp;
         d_footstep(2) = 0.0;
         // overwrite footsteps
         if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&
@@ -717,6 +759,10 @@ namespace rats
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
       }
+      prev_ref_cog = ref_cog;
+      prev_act_cog = act_cog;
+      prev_ref_cogvel = ref_cogvel;
+      prev_act_cogvel = act_cogvel;
     }
     // limit stride
     if (use_stride_limitation && lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-overwritable_footstep_index_offset-2 &&

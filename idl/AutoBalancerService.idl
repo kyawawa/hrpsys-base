@@ -253,6 +253,8 @@ module OpenHRP
       DblArray2 footstep_modification_gain;
       /// Whether modify footsteps based on Capture Point
       boolean modify_footsteps;
+      /// CP check margin when modifying footsteps (x, y) [m]
+      DblArray2 cp_check_margin;
     };
 
     /**

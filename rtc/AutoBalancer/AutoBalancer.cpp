@@ -487,7 +487,6 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     }
     if (m_emergencySignalWalkingIn.isNew()){
       m_emergencySignalWalkingIn.read();
-      gg->set_is_emergency_walking(m_emergencySignalWalking.data);
     }
     if (m_absActCOGIn.isNew()) {
       m_absActCOGIn.read();
@@ -1538,6 +1537,7 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_use_stride_limitation(i_param.use_stride_limitation);
   gg->set_footstep_modification_gain(i_param.footstep_modification_gain);
   gg->set_modify_footsteps(i_param.modify_footsteps);
+  gg->set_cp_check_margin(i_param.cp_check_margin);
   if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::SQUARE) {
     gg->set_stride_limitation_type(SQUARE);
   } else if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::CIRCLE) {
@@ -1630,6 +1630,9 @@ bool AutoBalancer::getGaitGeneratorParam(OpenHRP::AutoBalancerService::GaitGener
     i_param.footstep_modification_gain[i] = gg->get_footstep_modification_gain(i);
   }
   i_param.modify_footsteps = gg->get_modify_footsteps();
+  for (size_t i=0; i<2; i++) {
+    i_param.cp_check_margin[i] = gg->get_cp_check_margin(i);
+  }
   if (gg->get_stride_limitation_type() == SQUARE) {
     i_param.stride_limitation_type = OpenHRP::AutoBalancerService::SQUARE;
   } else if (gg->get_stride_limitation_type() == CIRCLE) {

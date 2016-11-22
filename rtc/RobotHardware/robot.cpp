@@ -645,7 +645,6 @@ bool robot::checkEmergency(emg_reason &o_reason, int &o_id)
 
 bool robot::setServoGainPercentage(const char *i_jname, double i_percentage)
 {
-    if ( i_percentage < 0 || 100 < i_percentage ) {
     return setServoGainPercentagePD(i_jname, i_percentage, true, true);
 }
 

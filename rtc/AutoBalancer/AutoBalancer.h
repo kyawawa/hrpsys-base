@@ -275,7 +275,7 @@ class AutoBalancer
   hrp::Vector3 graspless_manip_p_gain;
   rats::coordinates graspless_manip_reference_trans_coords;
   double pos_ik_thre, rot_ik_thre;
-  hrp::Vector3 diff_cp;
+  hrp::Vector3 abs_cp, diff_cp;
   std::vector<bool> act_contact_states;
 };
 

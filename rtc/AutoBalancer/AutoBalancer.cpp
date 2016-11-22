@@ -475,13 +475,22 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_emergencySignalWalkingIn.read();
       gg->set_is_emergency_walking(m_emergencySignalWalking.data);
     }
+
+    if (m_absActCPIn.isNew()) {
+        m_absActCPIn.read();
+        abs_cp(0) = m_absActCP.data.x;
+        abs_cp(1) = m_absActCP.data.y;
+        abs_cp(2) = m_absActCP.data.z;
+    }
+
     if (m_absActCPIn.isNew() && m_absRefCPIn.isNew()) {
       m_absActCPIn.read();
       m_absRefCPIn.read();
-      diff_cp(0) = m_absRefCP.data.x - m_absActCP.data.x;
-      diff_cp(1) = m_absRefCP.data.y - m_absActCP.data.y;
-      diff_cp(2) = m_absRefCP.data.z - m_absActCP.data.z;
+      diff_cp(0) = m_absRefCP.data.x - abs_cp(0);
+      diff_cp(1) = m_absRefCP.data.y - abs_cp(1);
+      diff_cp(2) = m_absRefCP.data.z - abs_cp(2);
     }
+
     if (m_actContactStatesIn.isNew()) {
       m_actContactStatesIn.read();
       for (size_t i=0; i<2; i++) {

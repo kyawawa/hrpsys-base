@@ -584,9 +584,12 @@ namespace rats
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
             int rl = cur_leg == RLEG ? -1 : 1;
-            tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] + rl * 0.1;
-            tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1] + rl * 0.1;
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
+            // tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1] + rl * 0.1;
+            tmp_coords.pos[0] = abs_cp(0);
+            tmp_coords.pos[1] = abs_cp(1);
+            double first_step_time = default_step_time * 0.5;
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             set_foot_emergency(true);
@@ -607,17 +610,6 @@ namespace rats
         overwrite_footstep_nodes_list.clear();
         emergency_flg = STOPPING;
         print_footstep_nodes_list();
-        //  else {
-        //     initialize_gait_parameter(cog, lcg.get_support_leg_steps(), lcg.get_swing_leg_dst_steps());
-        //     set_foot_emergency(true);
-        //     coordinates tmp_start = get_swing_leg_steps()[0].worldcoords;
-        //     coordinates tmp_goal = get_swing_leg_steps()[0].worldcoords;
-        //     tmp_goal.pos[0] -= 0.2;
-        //     tmp_goal.pos[2] = 0;
-        //     lcg.set_tmp_start(tmp_start);
-        //     lcg.set_tmp_goal(tmp_goal);
-        //     emergency_flg = STOPPING;
-        // }
     } else if ( lcg.get_lcg_count() == get_overwrite_check_timing() ) {
       if (velocity_mode_flg != VEL_IDLING && lcg.get_footstep_index() > 0) {
         std::vector< std::vector<step_node> > cv;

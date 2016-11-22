@@ -1051,7 +1051,7 @@ namespace rats
     footstep_parameter footstep_param;
     velocity_mode_parameter vel_param, offset_vel_param;
     toe_heel_type_checker thtc;
-    hrp::Vector3 cog, refzmp, prev_que_rzmp; /* cog by calculating proc_one_tick */
+    hrp::Vector3 cog, refzmp, prev_que_rzmp, abs_cp; /* cog by calculating proc_one_tick */
     std::vector<hrp::Vector3> swing_foot_zmp_offsets, prev_que_sfzos;
     double dt; /* control loop [s] */
     std::vector<std::string> all_limbs;
@@ -1205,10 +1205,11 @@ namespace rats
       }
       _footstep_nodes_list.push_back(sns);
     };
-    void emergency_stop ()
+    void emergency_stop (hrp::Vector3 cp = hrp::Vector3::Zero())
     {
       if (!footstep_nodes_list.empty()) {
         velocity_mode_flg = VEL_IDLING;
+        abs_cp = cp;
         emergency_flg = EMERGENCY_STOP;
       }
     };

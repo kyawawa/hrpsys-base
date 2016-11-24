@@ -662,26 +662,6 @@ namespace rats
         }
       }
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
-        // firstly solve preview control
-        hrp::Vector3 rzmp;
-        std::vector<hrp::Vector3> sfzos;
-        bool refzmp_exist_p = rg.get_current_refzmp(rzmp, sfzos, default_double_support_ratio_before, default_double_support_ratio_after, default_double_support_static_ratio_before, default_double_support_static_ratio_after);
-        if (!refzmp_exist_p) {
-          finalize_count++;
-          rzmp = prev_que_rzmp;
-          sfzos = prev_que_sfzos;
-        } else {
-          prev_que_rzmp = rzmp;
-          prev_que_sfzos = sfzos;
-        }
-        Eigen::Matrix<double, 3,2> current_x_k;
-        Eigen::Matrix<double, 4,2> current_x_k_e;
-        preview_controller_ptr->get_x_k(current_x_k);
-        preview_controller_ptr->get_x_k_e(current_x_k_e);
-        preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
-        // reset current state
-        preview_controller_ptr->set_x_k(current_x_k);
-        preview_controller_ptr->set_x_k_e(current_x_k_e);
         // calculate sum of preview_f
         static double preview_f_sum;
         if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
@@ -695,7 +675,7 @@ namespace rats
         }
         // calculate modified footstep position
         double preview_db = 1/6.0 * dt * dt * dt + 1/2.0 * dt * dt * 1/std::sqrt(gravitational_acceleration / (cog(2) - refzmp(2)));
-        hrp::Vector3 d_footstep = -1/preview_f_sum * 1/preview_db * tmp_diff_cp;
+        hrp::Vector3 d_footstep = -1/preview_f_sum * 1/preview_db * footstep_modification_gain[0] * tmp_diff_cp;
         d_footstep(2) = 0.0;
         // overwrite footsteps
         if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&

@@ -82,6 +82,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_currentBaseRpyOut("currentBaseRpy", m_currentBaseRpy),
     m_allRefWrenchOut("allRefWrench", m_allRefWrench),
     m_allEECompOut("allEEComp", m_allEEComp),
+    m_qSTRefOut("qSTRef", m_qSTRef),
     m_debugDataOut("debugData", m_debugData),
     control_mode(MODE_IDLE),
     st_algorithm(OpenHRP::StabilizerService::TPCC),
@@ -148,6 +149,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("currentBaseRpy", m_currentBaseRpyOut);
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
+  addOutPort("q", m_qSTRefOut);
   addOutPort("debugData", m_debugDataOut);
 
   // Set service provider to Ports
@@ -428,6 +430,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
+  m_qSTRef.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
   m_pgainCurrent.data.length(m_robot->numJoints());
   m_dgainCurrent.data.length(m_robot->numJoints());
@@ -654,6 +657,11 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
         m_qRef.data[i] = m_robot->joint(i)->q;
         //m_tau.data[i] = m_robot->joint(i)->u;
       }
+      if (!(use_servo_gain_control && is_walking)) {
+          for ( int i = 0; i < m_robot->numJoints(); i++ ) {
+              m_qSTRef.data[i] = m_robot->joint(i)->q;
+          }
+      }
       m_zmp.data.x = rel_act_zmp(0);
       m_zmp.data.y = rel_act_zmp(1);
       m_zmp.data.z = rel_act_zmp(2);
@@ -723,6 +731,8 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_actBaseRpyOut.write();
       m_currentBaseRpyOut.write();
       m_currentBasePosOut.write();
+      m_qSTRef.tm = m_qRef.tm;
+      m_qSTRefOut.write();
       m_debugData.tm = m_qRef.tm;
       m_debugDataOut.write();
     }
@@ -1664,6 +1674,9 @@ void Stabilizer::gainControl(const double T)
             swing_joint_num = jpe_v[i]->numJoints();
             is_swing_contact = isContact(i);
         }
+    }
+    for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+        m_qSTRef.data[i] = m_robot->joint(i)->q;
     }
     if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
          || (isContact(0) && isContact(1)) ) { // Actual : double support phase

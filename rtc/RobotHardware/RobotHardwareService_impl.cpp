@@ -126,9 +126,41 @@ void RobotHardwareService_impl::setServoGainPercentage(const char *jname, double
     m_robot->setServoGainPercentage(jname, percentage);
 }
 
+void RobotHardwareService_impl::setEachServoGainPercentage(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& percentage)
+{
+    std::vector<double> gains(percentage.length());
+    for (unsigned int i = 0; i < percentage.length(); ++i) {
+        gains[i] = percentage[i];
+    }
+    m_robot->setEachServoGainPercentage(jname, &gains.front());
+}
+
 void RobotHardwareService_impl::setServoGainPercentagePD(const char *jname, double percentage, CORBA::Boolean p, CORBA::Boolean d)
 {
     m_robot->setServoGainPercentagePD(jname, percentage, p, d);
+}
+
+void RobotHardwareService_impl::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& percentage, CORBA::Boolean p, CORBA::Boolean d)
+{
+    std::vector<double> gains(percentage.length());
+    for (unsigned int i = 0; i < percentage.length(); ++i) {
+        gains[i] = percentage[i];
+    }
+    m_robot->setEachServoGainPercentagePD(jname, &gains.front(), p, d);
+}
+
+void RobotHardwareService_impl::getServoPgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _pgain)
+{
+    _pgain = new ::OpenHRP::RobotHardwareService::DblSequence();
+    _pgain->length(m_robot->numJoints());
+    m_robot->getServoPgainPercentage(_pgain->get_buffer());
+}
+
+void RobotHardwareService_impl::getServoDgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _dgain)
+{
+    _dgain = new ::OpenHRP::RobotHardwareService::DblSequence();
+    _dgain->length(m_robot->numJoints());
+    m_robot->getServoDgainPercentage(_dgain->get_buffer());
 }
 
 void RobotHardwareService_impl::setServoErrorLimit(const char *jname, double limit)

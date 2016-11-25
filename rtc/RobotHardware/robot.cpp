@@ -11,7 +11,8 @@
 #include "hrpsys/util/Hrpsys.h"
 
 #define CALIB_COUNT	(10*200)
-#define GAIN_COUNT	( 5*200)
+// #define GAIN_COUNT	( 5*200)
+#define GAIN_COUNT	(1)
 
 #define DEFAULT_MAX_ZMP_ERROR 0.03 //[m]
 #define DEFAULT_ANGLE_ERROR_LIMIT 0.2 // [rad]
@@ -115,7 +116,8 @@ bool robot::loadGain()
     strm.close();
     // Print loaded gain
     std::cerr << "[RobotHardware] loadGain" << std::endl;
-    for (unsigned int i=0; i<numJoints(); i++) {                                                                                                                                               std::cerr << "[RobotHardware]   " << joint(i)->name << ", pgain = " << default_pgain[i] << ", dgain = " << default_dgain[i] << std::endl;
+    for (unsigned int i=0; i<numJoints(); i++) {
+        std::cerr << "[RobotHardware]   " << joint(i)->name << ", pgain = " << default_pgain[i] << ", dgain = " << default_dgain[i] << std::endl;
     }
     return true;
 }

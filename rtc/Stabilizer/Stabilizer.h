@@ -120,6 +120,7 @@ class Stabilizer
   void calcEEForceMomentControl();
   void calcSwingEEModification ();
   void limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& ee_p, const std::vector<hrp::Matrix33>& ee_R);
+  void gainControl(const double T);
   void getParameter(OpenHRP::StabilizerService::stParam& i_stp);
   void setParameter(const OpenHRP::StabilizerService::stParam& i_stp);
   void setBoolSequenceParam (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name);
@@ -179,6 +180,10 @@ class Stabilizer
   RTC::TimedDoubleSeq m_qRefSeq;
   RTC::TimedBoolean m_walkingStates;
   RTC::TimedPoint3D m_sbpCogOffset;
+  RTC::TimedDoubleSeq m_pgainCurrent;
+  RTC::TimedDoubleSeq m_dgainCurrent;
+  RTC::TimedDoubleSeq m_pgainRef;
+  RTC::TimedDoubleSeq m_dgainRef;
   // for debug ouput
   RTC::TimedPoint3D m_originRefZmp, m_originRefCog, m_originRefCogVel, m_originNewZmp;
   RTC::TimedPoint3D m_originActZmp, m_originActCog, m_originActCogVel;
@@ -204,6 +209,8 @@ class Stabilizer
   RTC::InPort<RTC::TimedDoubleSeq> m_qRefSeqIn;
   RTC::InPort<RTC::TimedBoolean> m_walkingStatesIn;
   RTC::InPort<RTC::TimedPoint3D> m_sbpCogOffsetIn;
+  RTC::InPort<RTC::TimedDoubleSeq> m_pgainCurrentIn;
+  RTC::InPort<RTC::TimedDoubleSeq> m_dgainCurrentIn;
 
   std::vector<RTC::TimedDoubleSeq> m_wrenches;
   std::vector<RTC::InPort<RTC::TimedDoubleSeq> *> m_wrenchesIn;
@@ -228,6 +235,8 @@ class Stabilizer
   RTC::OutPort<RTC::TimedLong> m_emergencySignalOut;
   RTC::OutPort<RTC::TimedBoolean> m_emergencySignalWalkingOut;
   RTC::OutPort<RTC::TimedBoolean> m_walkingStopSignalOut;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_pgainRefOut;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_dgainRefOut;
   // for debug output
   RTC::OutPort<RTC::TimedPoint3D> m_originRefZmpOut, m_originRefCogOut, m_originRefCogVelOut, m_originNewZmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_originActZmpOut, m_originActCogOut, m_originActCogVelOut;
@@ -280,6 +289,9 @@ class Stabilizer
     hrp::Matrix33 target_ee_diff_r;
     // IK parameter
     double avoid_gain, reference_gain, max_limb_length, limb_length_margin;
+    // servo gain
+    hrp::dvector swing_servo_pgain_percentage, swing_servo_dgain_percentage;
+    // hrp::dvector servo_pgain_percentage, servo_dgain_percentage;
   };
   enum cmode {MODE_IDLE, MODE_AIR, MODE_ST, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_AIR} control_mode;
   // members
@@ -297,7 +309,7 @@ class Stabilizer
   int transition_count, loop;
   int m_is_falling_counter;
   std::vector<int> m_will_fall_counter;
-  bool is_legged_robot, on_ground, is_emergency, is_walking_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance;
+  bool is_legged_robot, on_ground, is_emergency, is_walking_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance, use_servo_gain_control;
   bool is_walking, is_estop_while_walking;
   hrp::Vector3 current_root_p, target_root_p, ref_foot_origin_pos;
   hrp::Matrix33 current_root_R, target_root_R, prev_act_foot_origin_rot, prev_ref_foot_origin_rot, target_foot_origin_rot, ref_foot_origin_rot;
@@ -334,6 +346,8 @@ class Stabilizer
   double swing_collision_threshold;
   int swing_collision_direction;
   OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
+  hrp::dvector servo_pgain_percentage, servo_dgain_percentage;
+  double gain_control_time_const;
 };
 
 

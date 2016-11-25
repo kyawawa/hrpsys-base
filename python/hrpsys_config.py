@@ -389,6 +389,8 @@ class HrpsysConfigurator(object):
             connectPorts(self.abc.port("contactStates"), self.st.port("contactStates"))
             connectPorts(self.abc.port("controlSwingSupportTime"), self.st.port("controlSwingSupportTime"))
             connectPorts(self.rh.port("q"), self.st.port("qCurrent"))
+            connectPorts(self.rh.port("pgain"), self.st.port("pgainCurrent"))
+            connectPorts(self.rh.port("dgain"), self.st.port("dgainCurrent"))
             connectPorts(self.seq.port("qRef"), self.st.port("qRefSeq"))
             connectPorts(self.abc.port("walkingStates"), self.st.port("walkingStates"))
             connectPorts(self.abc.port("sbpCogOffset"), self.st.port("sbpCogOffset"))
@@ -403,6 +405,8 @@ class HrpsysConfigurator(object):
             connectPorts(self.st.port("absRefCOGVel"), self.abc.port("absRefCOGVel"))
             connectPorts(self.st.port("actContactStates"), self.abc.port("actContactStates"))
             connectPorts(self.st.port("walkingStopSignal"), self.abc.port("walkingStopSignal"))
+            connectPorts(self.st.port("pgainRef"), self.rh.port("pgainRef"))
+            connectPorts(self.st.port("dgainRef"), self.rh.port("dgainRef"))
 
         # ref force moment connection
         for sen in self.getForceSensorNames():

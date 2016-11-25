@@ -15,6 +15,8 @@
 #include "hrpsys/util/VectorConvert.h"
 #include <math.h>
 #include <boost/lambda/lambda.hpp>
+// #include "hrpsys/idl/RobotHardwareService.hh"
+#include "../RobotHardware/RobotHardwareService_impl.h"
 
 typedef coil::Guard<coil::Mutex> Guard;
 // Module specification
@@ -66,6 +68,8 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_qRefSeqIn("qRefSeq", m_qRefSeq),
     m_walkingStatesIn("walkingStates", m_walkingStates),
     m_sbpCogOffsetIn("sbpCogOffset", m_sbpCogOffset),
+    m_pgainCurrentIn("pgainCurrent", m_pgainCurrent),
+    m_dgainCurrentIn("dgainCurrent", m_dgainCurrent),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -80,6 +84,8 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
     m_emergencySignalWalkingOut("emergencySignalWalking", m_emergencySignalWalking),
     m_walkingStopSignalOut("walkingStopSignal", m_walkingStopSignal),
+    m_pgainRefOut("pgainRef", m_pgainRef),
+    m_dgainRefOut("dgainRef", m_pgainRef),
     // for debug output
     m_originRefZmpOut("originRefZmp", m_originRefZmp),
     m_originRefCogOut("originRefCog", m_originRefCog),
@@ -132,6 +138,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("qRefSeq", m_qRefSeqIn);
   addInPort("walkingStates", m_walkingStatesIn);
   addInPort("sbpCogOffset", m_sbpCogOffsetIn);
+  addInPort("pgainCurrent", m_pgainCurrentIn);
+  addInPort("dgainCurrent", m_dgainCurrentIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -148,6 +156,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("emergencySignal", m_emergencySignalOut);
   addOutPort("emergencySignalWalking", m_emergencySignalWalkingOut);
   addOutPort("walkingStopSignal", m_walkingStopSignalOut);
+  addOutPort("pgainRef", m_pgainRefOut);
+  addOutPort("dgainRef", m_dgainRefOut);
   // for debug output
   addOutPort("originRefZmp", m_originRefZmpOut);
   addOutPort("originRefCog", m_originRefCogOut);
@@ -254,6 +264,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       coil::stringTo(ee_name, end_effectors_str[i*prop_num].c_str());
       coil::stringTo(ee_target, end_effectors_str[i*prop_num+1].c_str());
       coil::stringTo(ee_base, end_effectors_str[i*prop_num+2].c_str());
+      jpe_v.push_back(hrp::JointPathExPtr(new hrp::JointPathEx(m_robot, m_robot->link(ee_base), m_robot->link(ee_target), dt, false, std::string(m_profile.instance_name))));
       STIKParam ikp;
       for (size_t j = 0; j < 3; j++) {
         coil::stringTo(ikp.localp(j), end_effectors_str[i*prop_num+3+j].c_str());
@@ -290,9 +301,10 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       ikp.target_ee_diff_r_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.prev_d_pos_swing = hrp::Vector3::Zero();
       ikp.prev_d_rpy_swing = hrp::Vector3::Zero();
+      ikp.swing_servo_pgain_percentage = 40 * hrp::dvector::Ones(jpe_v.back()->numJoints());
+      ikp.swing_servo_dgain_percentage = 40 * hrp::dvector::Ones(jpe_v.back()->numJoints());
       //
       stikp.push_back(ikp);
-      jpe_v.push_back(hrp::JointPathExPtr(new hrp::JointPathEx(m_robot, m_robot->link(ee_base), m_robot->link(ee_target), dt, false, std::string(m_profile.instance_name))));
       // Fix for toe joint
       if (ee_name.find("leg") != std::string::npos && jpe_v.back()->numJoints() == 7) { // leg and has 7dof joint (6dof leg +1dof toe)
           std::vector<double> optw;
@@ -411,6 +423,10 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   limb_stretch_avoidance_vlimit[0] = -100 * 1e-3 * dt; // lower limit
   limb_stretch_avoidance_vlimit[1] = 50 * 1e-3 * dt; // upper limit
   cp_offset = hrp::Vector3(0.0, 0.0, 0.0);
+  use_servo_gain_control = false;
+  servo_pgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
+  servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
+  gain_control_time_const = 0.4;
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -443,6 +459,10 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
+  m_pgainCurrent.data.length(m_robot->numJoints());
+  m_dgainCurrent.data.length(m_robot->numJoints());
+  m_pgainRef.data.length(m_robot->numJoints());
+  m_dgainRef.data.length(m_robot->numJoints());
   transition_joint_q.resize(m_robot->numJoints());
   qorg.resize(m_robot->numJoints());
   qrefv.resize(m_robot->numJoints());
@@ -616,6 +636,18 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     sbp_cog_offset(1) = m_sbpCogOffset.data.y;
     sbp_cog_offset(2) = m_sbpCogOffset.data.z;
   }
+  if (m_pgainCurrentIn.isNew()) {
+    m_pgainCurrentIn.read();
+    for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+        servo_pgain_percentage(i) = m_pgainCurrent.data[i];
+    }
+  }
+  if (m_dgainCurrentIn.isNew()) {
+    m_dgainCurrentIn.read();
+    for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+        servo_dgain_percentage(i) = m_dgainCurrent.data[i];
+    }
+  }
 
   if (is_legged_robot) {
     getCurrentParameters();
@@ -634,6 +666,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       } else {
         calcTPCC();
       }
+      if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
       if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
       break;
     case MODE_SYNC_TO_IDLE:
@@ -745,6 +778,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_debugDataOut.write();
     }
     m_qRefOut.write();
+    if (use_servo_gain_control && is_walking) {
+        for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+            m_pgainRef.data[i] = servo_pgain_percentage(i);
+            m_dgainRef.data[i] = servo_dgain_percentage(i);
+        }
+        m_pgainRef.tm = m_qRef.tm;
+        m_pgainRefOut.write();
+        m_dgainRef.tm = m_qRef.tm;
+        m_dgainRefOut.write();
+    }
     // emergencySignal
     if (reset_emergency_flag) {
       m_emergencySignal.data = 0;
@@ -1724,6 +1767,37 @@ void Stabilizer::limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& e
   m_robot->rootLink()->p(2) += d_pos_z_root;
 }
 
+void Stabilizer::gainControl(const double T)
+{
+    double remain_swing_time = 1.0;
+    STIKParam next_swing_ikp = stikp[0];
+    size_t swing_joint_num = 0;
+    bool is_swing_contact = true;
+    for (size_t i = 0; i < stikp.size(); i++) {
+        if (m_controlSwingSupportTime.data[i] < remain_swing_time) {
+            remain_swing_time = m_controlSwingSupportTime.data[i];
+            next_swing_ikp = stikp[i];
+            swing_joint_num = jpe_v[i]->numJoints();
+            is_swing_contact = isContact(i);
+        }
+    }
+    if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
+         || (isContact(0) && isContact(1)) ) { // Actual : double support phase
+        servo_pgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_pgain_percentage) / ((remain_swing_time) / dt); // need offset ?
+        servo_dgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_dgain_percentage) / ((remain_swing_time) / dt);
+        for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+            m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
+            m_robot->joint(i)->q += -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q) * dt;
+        }
+    } else if (!is_swing_contact) {
+        hrp::Link* link = m_robot->link(next_swing_ikp.target_name);
+        for (int i = swing_joint_num - 1; i >= 0; --i, link = link->parent) {
+            servo_pgain_percentage[link->jointId] = next_swing_ikp.swing_servo_pgain_percentage(i);
+            servo_dgain_percentage[link->jointId] = next_swing_ikp.swing_servo_dgain_percentage(i);
+        }
+    }
+}
+
 // Damping control functions
 //   Basically Equation (14) in the paper [1]
 double Stabilizer::calcDampingControl (const double tau_d, const double tau, const double prev_d,
@@ -1886,6 +1960,8 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.eefm_swing_rot_time_const.length(stikp.size());
   i_stp.eefm_ee_moment_limit.length(stikp.size());
   i_stp.eefm_ee_forcemoment_distribution_weight.length(stikp.size());
+  i_stp.swing_servo_pgain_percentage.length(stikp.size());
+  i_stp.swing_servo_dgain_percentage.length(stikp.size());
   for (size_t j = 0; j < stikp.size(); j++) {
       i_stp.eefm_pos_damping_gain[j].length(3);
       i_stp.eefm_pos_time_const_support[j].length(3);
@@ -1897,6 +1973,8 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       i_stp.eefm_swing_rot_time_const[j].length(3);
       i_stp.eefm_ee_moment_limit[j].length(3);
       i_stp.eefm_ee_forcemoment_distribution_weight[j].length(6);
+      i_stp.swing_servo_pgain_percentage[j].length(jpe_v[j]->numJoints());
+      i_stp.swing_servo_dgain_percentage[j].length(jpe_v[j]->numJoints());
       for (size_t i = 0; i < 3; i++) {
           i_stp.eefm_pos_damping_gain[j][i] = stikp[j].eefm_pos_damping_gain(i);
           i_stp.eefm_pos_time_const_support[j][i] = stikp[j].eefm_pos_time_const_support(i);
@@ -1909,6 +1987,10 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
           i_stp.eefm_ee_moment_limit[j][i] = stikp[j].eefm_ee_moment_limit(i);
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i] = stikp[j].eefm_ee_forcemoment_distribution_weight(i);
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i+3] = stikp[j].eefm_ee_forcemoment_distribution_weight(i+3);
+      }
+      for (size_t i = 0; i < jpe_v[j]->numJoints(); ++i) {
+          i_stp.swing_servo_pgain_percentage[j][i] = stikp[j].swing_servo_pgain_percentage(i);
+          i_stp.swing_servo_dgain_percentage[j][i] = stikp[j].swing_servo_dgain_percentage(i);
       }
       i_stp.eefm_pos_compensation_limit[j] = stikp[j].eefm_pos_compensation_limit;
       i_stp.eefm_rot_compensation_limit[j] = stikp[j].eefm_rot_compensation_limit;
@@ -2000,6 +2082,8 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   for (size_t i = 0; i < 2; i++) {
     i_stp.limb_stretch_avoidance_vlimit[i] = limb_stretch_avoidance_vlimit[i];
   }
+  i_stp.use_servo_gain_control = use_servo_gain_control;
+  i_stp.gain_control_time_const = gain_control_time_const;
   for (size_t i = 0; i < stikp.size(); i++) {
       const rats::coordinates cur_ee = rats::coordinates(stikp.at(i).localp, stikp.at(i).localR);
       OpenHRP::AutoBalancerService::Footstep ret_ee;
@@ -2154,6 +2238,10 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
       stikp[i].target_ee_diff_p_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
       stikp[i].target_ee_diff_r_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
       stikp[i].limb_length_margin = i_stp.limb_length_margin[i];
+      for (size_t j = 0; j < stikp[i].swing_servo_pgain_percentage.size(); ++j) {
+          stikp[i].swing_servo_pgain_percentage(j) = i_stp.swing_servo_pgain_percentage[i][j];
+          stikp[i].swing_servo_dgain_percentage(j) = i_stp.swing_servo_dgain_percentage[i][j];
+      }
   }
   setBoolSequenceParam(is_ik_enable, i_stp.is_ik_enable, std::string("is_ik_enable"));
   setBoolSequenceParam(is_feedback_control_enable, i_stp.is_feedback_control_enable, std::string("is_feedback_control_enable"));
@@ -2180,6 +2268,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   for (size_t i = 0; i < 2; i++) {
     limb_stretch_avoidance_vlimit[i] = i_stp.limb_stretch_avoidance_vlimit[i];
   }
+  use_servo_gain_control = i_stp.use_servo_gain_control;
+  gain_control_time_const = i_stp.gain_control_time_const;
   if (control_mode == MODE_IDLE) {
       for (size_t i = 0; i < i_stp.end_effector_list.length(); i++) {
           std::vector<STIKParam>::iterator it = std::find_if(stikp.begin(), stikp.end(), (&boost::lambda::_1->* &std::vector<STIKParam>::value_type::ee_name == std::string(i_stp.end_effector_list[i].leg)));

@@ -31,8 +31,12 @@ public:
     void getStatus2(OpenHRP::RobotHardwareService::RobotState2_out rs);
     CORBA::Boolean power(const char* jname, OpenHRP::RobotHardwareService::SwitchStatus ss);
     CORBA::Boolean servo(const char* jname, OpenHRP::RobotHardwareService::SwitchStatus ss);
-    void setServoGainPercentage(const char *jname, double limit);
-    void setServoGainPercentagePD(const char *jname, double limit, bool p, bool d);
+    void setServoGainPercentage(const char *jname, double i_percentage);
+    void setEachServoGainPercentage(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage);
+    void setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d);
+    void setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d);
+    void getServoPgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _pgain);
+    void getServoDgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _dgain);
     void setServoErrorLimit(const char *jname, double limit);
     void calibrateInertiaSensor();
     void removeForceSensorOffset();
@@ -115,7 +119,12 @@ public:
     //void readExtraServoState(int id, int *state);
     typedef enum {EMG_NONE, EMG_SERVO_ERROR, EMG_FZ} emg_reason;
     bool checkEmergency(emg_reason &o_reason, int &o_id);
-    //bool setServoGainPercentage(const char *i_jname, double i_percentage);
+    void setServoGainPercentage(const char *jname, double i_percentage);
+    void setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d);
+    bool setEachServoGainPercentage(const char *i_jname, const std::vector<double> i_percentage);
+    bool setEachServoGainPercentagePD(const char *i_jname, const std::vector<double> i_percentage, bool p, bool d);
+    void getServoPgainPercentage(double *_pgain) {};
+    void getServoDgainPercentage(double *_dgain) {};
     bool setServoErrorLimit(const char *i_jname, double i_limit);
     //void setProperty(const char *key, const char *value);
     //bool addJointGroup(const char *gname, const std::vector<std::string>& jnames);

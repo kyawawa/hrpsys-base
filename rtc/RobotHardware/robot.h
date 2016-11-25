@@ -261,7 +261,11 @@ public:
        \return true if set successfully, false otherwise 
      */
     bool setServoGainPercentage(const char *i_jname, double i_percentage);
+    bool setEachServoGainPercentage(const char *i_jname, const double *i_percentage);
     bool setServoGainPercentagePD(const char *i_jname, double i_percentage, bool p, bool d);
+    bool setEachServoGainPercentagePD(const char *i_jname, const double *i_percentage, bool p, bool d);
+    void getServoPgainPercentage(double *_pgain);
+    void getServoDgainPercentage(double *_dgain);
 
     /**
        \brief set servo error limit value for specific joint or joint group

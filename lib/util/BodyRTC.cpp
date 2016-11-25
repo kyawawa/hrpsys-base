@@ -660,10 +660,27 @@ CORBA::Boolean RobotHardwareServicePort::power(const char* jname, OpenHRP::Robot
 CORBA::Boolean RobotHardwareServicePort::servo(const char* jname, OpenHRP::RobotHardwareService::SwitchStatus turnon) {
     m_robot->servo(jname, turnon == OpenHRP::RobotHardwareService::SWITCH_ON);
 }
-void RobotHardwareServicePort::setServoGainPercentage(const char *jname, double limit) {
+void RobotHardwareServicePort::setServoGainPercentage(const char *jname, double i_percentage) {
 }
-void RobotHardwareServicePort::setServoGainPercentagePD(const char *jname, double limit, bool p, bool d) {
+void RobotHardwareServicePort::setEachServoGainPercentage(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage) {
 }
+void RobotHardwareServicePort::setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d) {
+}
+void RobotHardwareServicePort::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d) {
+}
+
+void RobotHardwareServicePort::getServoPgainPercentage(OpenHRP::RobotHardwareService::DblSequence_out _pgain) {
+    _pgain = new ::OpenHRP::RobotHardwareService::DblSequence();
+    _pgain->length(m_robot->numJoints());
+    m_robot->getServoPgainPercentage(_pgain->get_buffer());
+}
+
+void RobotHardwareServicePort::getServoDgainPercentage(OpenHRP::RobotHardwareService::DblSequence_out _dgain) {
+    _dgain = new ::OpenHRP::RobotHardwareService::DblSequence();
+    _dgain->length(m_robot->numJoints());
+    m_robot->getServoDgainPercentage(_dgain->get_buffer());
+}
+
 void RobotHardwareServicePort::setServoErrorLimit(const char *jname, double limit) {
     m_robot->setServoErrorLimit(jname, limit);
 }

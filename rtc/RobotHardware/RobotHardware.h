@@ -112,8 +112,8 @@ class RobotHardware
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
-  int m_isDemoMode;  
-  
+  int m_isDemoMode;
+
   // </rtc-template>
 
   // DataInPort declaration
@@ -134,7 +134,13 @@ class RobotHardware
   */
   TimedDoubleSeq m_tauRef;
   InPort<TimedDoubleSeq> m_tauRefIn;
-  
+  /**
+     \brief array of reference gains of joint with jointId
+  */
+  TimedDoubleSeq m_pgainRef;
+  InPort<TimedDoubleSeq> m_pgainRefIn;
+  TimedDoubleSeq m_dgainRef;
+  InPort<TimedDoubleSeq> m_dgainRefIn;
   // </rtc-template>
 
   /**
@@ -168,6 +174,8 @@ class RobotHardware
   std::vector<TimedDoubleSeq> m_force;
   OpenHRP::TimedLongSeqSeq m_servoState;
   TimedLong m_emergencySignal;
+  TimedDoubleSeq m_pgain;
+  TimedDoubleSeq m_dgain;
 
   // DataOutPort declaration
   // <rtc-template block="outport_declare">
@@ -180,24 +188,26 @@ class RobotHardware
   std::vector<OutPort<TimedDoubleSeq> *> m_forceOut;
   OutPort<OpenHRP::TimedLongSeqSeq> m_servoStateOut;
   OutPort<TimedLong> m_emergencySignalOut;
+  OutPort<TimedDoubleSeq> m_pgainOut;
+  OutPort<TimedDoubleSeq> m_dgainOut;
 
   // </rtc-template>
 
   // CORBA Port declaration
   // <rtc-template block="corbaport_declare">
   RTC::CorbaPort m_RobotHardwareServicePort;
-  
+
   // </rtc-template>
 
   // Service declaration
   // <rtc-template block="service_declare">
   RobotHardwareService_impl m_service0;
-  
+
   // </rtc-template>
 
   // Consumer declaration
   // <rtc-template block="consumer_declare">
-  
+
   // </rtc-template>
 
   robot *robot_ptr(void) { return m_robot.get(); };

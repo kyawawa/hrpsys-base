@@ -49,12 +49,16 @@ RobotHardware::RobotHardware(RTC::Manager* manager)
     m_qRefIn("qRef", m_qRef),
     m_dqRefIn("dqRef", m_dqRef),
     m_tauRefIn("tauRef", m_tauRef),
+    m_pgainRefIn("pgainRef", m_pgainRef),
+    m_dgainRefIn("dgainRef", m_dgainRef),
     m_qOut("q", m_q),
     m_dqOut("dq", m_dq),
     m_tauOut("tau", m_tau),
     m_ctauOut("ctau", m_ctau),
     m_servoStateOut("servoState", m_servoState),
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
+    m_pgainOut("pgain", m_pgain),
+    m_dgainOut("dgain", m_dgain),
     m_RobotHardwareServicePort("RobotHardwareService"),
     // </rtc-template>
 	dummy(0)
@@ -70,10 +74,12 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
 {
   // Registration: InPort/OutPort/Service
   // <rtc-template block="registration">
-  
+
   addInPort("qRef", m_qRefIn);
   addInPort("dqRef", m_dqRefIn);
   addInPort("tauRef", m_tauRefIn);
+  addInPort("pgainRef", m_pgainRefIn);
+  addInPort("dgainRef", m_dgainRefIn);
 
   addOutPort("q", m_qOut);
   addOutPort("dq", m_dqOut);
@@ -81,15 +87,17 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
   addOutPort("ctau", m_ctauOut);
   addOutPort("servoState", m_servoStateOut);
   addOutPort("emergencySignal", m_emergencySignalOut);
+  addOutPort("pgain", m_pgainOut);
+  addOutPort("dgain", m_dgainOut);
 
   // Set service provider to Ports
     m_RobotHardwareServicePort.registerProvider("service0", "RobotHardwareService", m_service0);
-  
+
   // Set service consumers to Ports
-  
+
   // Set CORBA Service Ports
   addPort(m_RobotHardwareServicePort);
-  
+
   // </rtc-template>
 
   RTC::Properties& prop = getProperties();
@@ -109,7 +117,7 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
   }
   nameServer = nameServer.substr(0, comPos);
   RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), 
+  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(),
                                CosNaming::NamingContext::_duplicate(naming.getRootContext())
           )){
       if (prop["model"] == ""){
@@ -122,7 +130,7 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
   std::vector<std::string> keys = prop.propertyNames();
   for (unsigned int i=0; i<keys.size(); i++){
       m_robot->setProperty(keys[i].c_str(), prop[keys[i]].c_str());
-  } 
+  }
   std::cout << "dof = " << m_robot->numJoints() << std::endl;
   if (!m_robot->init()) return RTC::RTC_ERROR;
 
@@ -133,9 +141,13 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
   m_tau.data.length(m_robot->numJoints());
   m_ctau.data.length(m_robot->numJoints());
   m_servoState.data.length(m_robot->numJoints());
+  m_pgain.data.length(m_robot->numJoints());
+  m_dgain.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
   m_dqRef.data.length(m_robot->numJoints());
   m_tauRef.data.length(m_robot->numJoints());
+  m_pgainRef.data.length(m_robot->numJoints());
+  m_dgainRef.data.length(m_robot->numJoints());
 
   int ngyro = m_robot->numSensors(Sensor::RATE_GYRO);
   std::cout << "the number of gyros = " << ngyro << std::endl;
@@ -173,7 +185,7 @@ RTC::ReturnCode_t RobotHardware::onInitialize()
 
   // <rtc-template block="bind_config">
   // Bind variables and configuration variable
-  bindParameter("isDemoMode", m_isDemoMode, "0");  
+  bindParameter("isDemoMode", m_isDemoMode, "0");
   bindParameter("servoErrorLimit", m_robot->m_servoErrorLimit, ",");
   bindParameter("fzLimitRatio", m_robot->m_fzLimitRatio, "2");
   bindParameter("jointAccelerationLimit", m_robot->m_accLimit, "0");
@@ -238,23 +250,54 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
               m_emergencySignalOut.write();
           }
       }
-  }    
-
+  }
+  std::vector<double> pgains(m_robot->numJoints());
+  // std::vector<double> old_pgains(m_robot->numJoints());
+  std::vector<double> dgains(m_robot->numJoints());
+  // std::vector<double> old_dgains(m_robot->numJoints());
+  // m_robot->getServoPgainPercentage(&old_pgains.front());
+  // m_robot->getServoDgainPercentage(&old_dgains.front());
+  if (m_pgainRefIn.isNew()) {
+      m_pgainRefIn.read();
+      m_robot->setEachServoGainPercentagePD("all", m_pgainRef.data.get_buffer(), true, false);
+  }
+  if (m_dgainRefIn.isNew()) {
+      m_dgainRefIn.read();
+      m_robot->setEachServoGainPercentagePD("all", m_dgainRef.data.get_buffer(), false, true);
+  }
+  m_robot->getServoPgainPercentage(&pgains.front());
+  m_robot->getServoDgainPercentage(&dgains.front());
+  // std::vector<double> act_angles(m_robot->numJoints());
+  // std::vector<double> act_vels(m_robot->numJoints());
+  // m_robot->readJointAngles(&act_angles.front());
+  // m_robot->readJointVelocities(&act_vels.front());
+  // double T = 0.8; // time const
+  // change reference angle in response to changing gains
   if (m_qRefIn.isNew()){
       m_qRefIn.read();
       //std::cout << "RobotHardware: qRef[21] = " << m_qRef.data[21] << std::endl;
-      if (!m_isDemoMode 
+      if (!m_isDemoMode
           && m_robot->checkJointCommands(m_qRef.data.get_buffer())){
           m_robot->servo("all", false);
           m_emergencySignal.data = robot::EMG_SERVO_ERROR;
           m_emergencySignalOut.write();
       }else{
+          // for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+          //     if (pgains[i] > old_pgains[i] || dgains[i] > old_dgains[i]) {
+          //         m_qRef.data[i] += -1/T * (act_angles[i] - m_qRef.data[i]) * dt;
+          //     }
+          // }
           // output to iob
           m_robot->writeJointCommands(m_qRef.data.get_buffer());
       }
   }
   if (m_dqRefIn.isNew()){
       m_dqRefIn.read();
+      // for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+      //     if (pgains[i] > old_pgains[i] || dgains[i] > old_dgains[i]) {
+      //         m_dqRef.data[i] = -1/T * (act_angles[i] - m_qRef.data[i]);
+      //     }
+      // }
       //std::cout << "RobotHardware: dqRef[21] = " << m_dqRef.data[21] << std::endl;
       // output to iob
       m_robot->writeVelocityCommands(m_dqRef.data.get_buffer());
@@ -267,9 +310,9 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
   }
 
   // read from iob
-  m_robot->readJointAngles(m_q.data.get_buffer());  
+  m_robot->readJointAngles(m_q.data.get_buffer());
   m_q.tm = tm;
-  m_robot->readJointVelocities(m_dq.data.get_buffer());  
+  m_robot->readJointVelocities(m_dq.data.get_buffer());
   m_dq.tm = tm;
   m_robot->readJointTorques(m_tau.data.get_buffer());
   m_tau.tm = tm;
@@ -297,7 +340,7 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
       m_robot->readForceSensor(i, m_force[i].data.get_buffer());
       m_force[i].tm = tm;
   }
-  
+
   for (unsigned int i=0; i<m_servoState.data.length(); i++){
       size_t len = m_robot->lengthOfExtraServoState(i)+1;
       m_servoState.data[i].length(len);
@@ -316,7 +359,14 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
       m_robot->readExtraServoState(i, (int *)(m_servoState.data[i].get_buffer()+1));
   }
   m_servoState.tm = tm;
-  
+
+  for ( int i = 0; i < m_robot->numJoints(); i++ ){
+      m_pgain.data[i] = pgains[i];
+      m_dgain.data[i] = dgains[i];
+  }
+  m_pgain.tm = tm;
+  m_dgain.tm = tm;
+
   m_robot->oneStep();
 
   m_qOut.write();
@@ -324,6 +374,8 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
   m_tauOut.write();
   m_ctauOut.write();
   m_servoStateOut.write();
+  m_pgainOut.write();
+  m_dgainOut.write();
   for (unsigned int i=0; i<m_rateOut.size(); i++){
       m_rateOut[i]->write();
   }
@@ -386,5 +438,3 @@ extern "C"
   }
 
 };
-
-

@@ -227,6 +227,10 @@ module OpenHRP
       DblArray2 limb_stretch_avoidance_vlimit;
       /// Sequence of limb length margin from max limb length [m]
       sequence<double> limb_length_margin;
+      /// Whether change swing leg servo gain
+      boolean use_servo_gain_control;
+      sequence<sequence<double> > swing_servo_pgain_percentage, swing_servo_dgain_percentage;
+      double gain_control_time_const;
     };
 
     /**
@@ -259,4 +263,3 @@ module OpenHRP
     boolean dummy();
   };
 };
-

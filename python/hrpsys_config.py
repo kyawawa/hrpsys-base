@@ -892,6 +892,7 @@ class HrpsysConfigurator(object):
             self.connectLoggerPort(self.st, 'allRefWrench')
             self.connectLoggerPort(self.st, 'allEEComp')
             self.connectLoggerPort(self.st, 'q')
+            self.connectLoggerPort(self.st, 'qSTRef')
             self.connectLoggerPort(self.st, 'actBaseRpy')
             self.connectLoggerPort(self.st, 'currentBasePos')
             self.connectLoggerPort(self.st, 'currentBaseRpy')

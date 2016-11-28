@@ -584,7 +584,7 @@ namespace rats
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
             int rl = cur_leg == RLEG ? -1 : 1;
-            tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] + rl * 0.1;
+            tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
             tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1] + rl * 0.1;
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
@@ -1033,7 +1033,7 @@ namespace rats
     rg.set_indices(idx);
     if (overwritable_footstep_index_offset == 0) {
         rg.set_refzmp_count(lcg.get_lcg_count()); // Start refzmp_count from current remaining footstep count of swinging.
-        rg.set_one_step_count(lcg.get_lcg_count());
+        if (emergency_flg == EMERGENCY_STOP) rg.set_one_step_count(lcg.get_lcg_count()); // Change time to land the floor
     } else {
         rg.set_refzmp_count(static_cast<size_t>(fnsl[0][0].step_time/dt)); // Start refzmp_count from step length of first overwrite step
     }

@@ -34,7 +34,7 @@ public:
     void setServoGainPercentage(const char *jname, double i_percentage);
     void setEachServoGainPercentage(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage);
     void setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d);
-    void setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d);
+    void setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d, bool isout);
     void getServoPgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _pgain);
     void getServoDgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _dgain);
     void setServoErrorLimit(const char *jname, double limit);
@@ -122,7 +122,7 @@ public:
     void setServoGainPercentage(const char *jname, double i_percentage);
     void setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d);
     bool setEachServoGainPercentage(const char *i_jname, const std::vector<double> i_percentage);
-    bool setEachServoGainPercentagePD(const char *i_jname, const std::vector<double> i_percentage, bool p, bool d);
+    bool setEachServoGainPercentagePD(const char *i_jname, const std::vector<double> i_percentage, bool p, bool d, bool isout);
     void getServoPgainPercentage(double *_pgain) {};
     void getServoDgainPercentage(double *_dgain) {};
     bool setServoErrorLimit(const char *i_jname, double i_limit);

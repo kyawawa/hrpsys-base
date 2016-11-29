@@ -652,57 +652,57 @@ bool robot::setServoGainPercentage(const char *i_jname, double i_percentage)
 
 bool robot::setEachServoGainPercentage(const char *i_jname, const double *i_percentage)
 {
-    return setEachServoGainPercentagePD(i_jname, i_percentage, true, true);
+    return setEachServoGainPercentagePD(i_jname, i_percentage, true, true, true);
 }
 
 bool robot::setServoGainPercentagePD(const char *i_jname, double i_percentage, bool p, bool d)
 {
     std::vector<double> vi_percentage(numJoints(), i_percentage);
-    return setEachServoGainPercentagePD(i_jname, &vi_percentage.front(), p, d);
+    return setEachServoGainPercentagePD(i_jname, &vi_percentage.front(), p, d, true);
 }
 
-bool robot::setEachServoGainPercentagePD(const char *i_jname, const double *i_percentage, bool p, bool d)
+bool robot::setEachServoGainPercentagePD(const char *i_jname, const double *i_percentage, bool p, bool d, bool isout)
 {
     if (!p && !d) return false;
     for (size_t i = 0; i < sizeof i_percentage / sizeof i_percentage[0]; ++i) {
         if ( i_percentage[i] < 0 || 100 < i_percentage[i] ) {
-            std::cerr << "[RobotHardware] Invalid percentage " <<  i_percentage[i] << "[%] for setServoGainPercentage. Percentage should be in (0, 100)[%]." << std::endl;
+            if (isout) std::cerr << "[RobotHardware] Invalid percentage " <<  i_percentage[i] << "[%] for setServoGainPercentage. Percentage should be in (0, 100)[%]." << std::endl;
             return false;
         }
     }
     Link *l = NULL;
     if (strcmp(i_jname, "all") == 0 || strcmp(i_jname, "ALL") == 0){
-        std::cerr << "[RobotHardware] setServoGainPercentage ";
+        if (isout) std::cerr << "[RobotHardware] setServoGainPercentage ";
         for (unsigned int i=0; i<numJoints(); i++){
             if (p) {
                 if (!read_pgain(i, &old_pgain[i])) old_pgain[i] = pgain[i];
                 pgain[i] = default_pgain[i] * i_percentage[i]/100.0;
-                std::cerr << i_percentage[i] << " ";
+                if (isout) std::cerr << i_percentage[i] << " ";
             }
             if (d) {
                 if (!read_dgain(i, &old_dgain[i])) old_dgain[i] = dgain[i];
                 dgain[i] = default_dgain[i] * i_percentage[i]/100.0;
-                std::cerr << i_percentage[i] << " ";
+                if (isout) std::cerr << i_percentage[i] << " ";
             }
             gain_counter[i] = 0;
         }
-        std::cerr << "[%] for joints" << std::endl;
+        if (isout) std::cerr << "[%] for joints" << std::endl;
     }else if ((l = link(i_jname))){
-        std::cerr << "[RobotHardware] setServoGainPercentage ";
+        if (isout) std::cerr << "[RobotHardware] setServoGainPercentage ";
         if (p) {
             if (!read_pgain(l->jointId, &old_pgain[l->jointId])) old_pgain[l->jointId] = pgain[l->jointId];
             pgain[l->jointId] = default_pgain[l->jointId] * i_percentage[0]/100.0;
-            std::cerr << i_percentage[0] << " ";
+            if (isout) std::cerr << i_percentage[0] << " ";
         }
         if (d) {
             if (!read_dgain(l->jointId, &old_dgain[l->jointId])) old_dgain[l->jointId] = dgain[l->jointId];
             dgain[l->jointId] = default_dgain[l->jointId] * i_percentage[0]/100.0;
-            std::cerr << i_percentage[0] << " ";
+            if (isout) std::cerr << i_percentage[0] << " ";
         }
         gain_counter[l->jointId] = 0;
-        std::cerr << "[%] for joints" << std::endl;
+        if (isout) std::cerr << "[%] for joints" << std::endl;
     }else{
-        std::cerr << "[RobotHardware] setServoGainPercentage ";
+        if (isout) std::cerr << "[RobotHardware] setServoGainPercentage ";
         char *s = (char *)i_jname; while(*s) {*s=toupper(*s);s++;}
         const std::vector<int> jgroup = m_jointGroups[i_jname];
         if (jgroup.size()==0) return false;
@@ -710,16 +710,16 @@ bool robot::setEachServoGainPercentagePD(const char *i_jname, const double *i_pe
             if (p) {
                 if (!read_pgain(jgroup[i], &old_pgain[jgroup[i]])) old_pgain[jgroup[i]] = pgain[jgroup[i]];
                 pgain[jgroup[i]] = default_pgain[jgroup[i]] * i_percentage[i]/100.0;
-                std::cerr << i_percentage[i] << " ";
+                if (isout) std::cerr << i_percentage[i] << " ";
             }
             if (d) {
                 if (!read_dgain(jgroup[i], &old_dgain[jgroup[i]])) old_dgain[jgroup[i]] = dgain[jgroup[i]];
                 dgain[jgroup[i]] = default_dgain[jgroup[i]] * i_percentage[i]/100.0;
-                std::cerr << i_percentage[i] << " ";
+                if (isout) std::cerr << i_percentage[i] << " ";
             }
             gain_counter[jgroup[i]] = 0;
         }
-        std::cerr << "[%] for joints" << std::endl;
+        if (isout) std::cerr << "[%] for joints" << std::endl;
     }
     return true;
 }

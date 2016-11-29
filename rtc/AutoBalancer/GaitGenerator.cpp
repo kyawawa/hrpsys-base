@@ -583,10 +583,19 @@ namespace rats
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
-            int rl = cur_leg == RLEG ? -1 : 1;
-            tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
-            tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1] + rl * 0.1;
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            double first_step_time;
+            if (is_cp_outside) {
+                hrp::Vector3 act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
+                tmp_coords.pos[0] = act_cp(0);
+                tmp_coords.pos[1] = act_cp(1);
+                first_step_time = default_step_time;
+            } else {
+                int rl = cur_leg == RLEG ? -1 : 1;
+                tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
+                tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
+                first_step_time = default_step_time;
+            }
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             set_foot_emergency(true);
@@ -606,6 +615,7 @@ namespace rats
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
         emergency_flg = STOPPING;
+        is_cp_outside = false;
         print_footstep_nodes_list();
         //  else {
         //     initialize_gait_parameter(cog, lcg.get_support_leg_steps(), lcg.get_swing_leg_dst_steps());

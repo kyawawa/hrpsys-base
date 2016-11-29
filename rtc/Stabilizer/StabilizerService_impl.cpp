@@ -32,11 +32,6 @@ void StabilizerService_impl::setParameter(const OpenHRP::StabilizerService::stPa
 	m_stabilizer->setParameter(i_stp);
 }
 
-void StabilizerService_impl::walkingEmergencyStop()
-{
-	m_stabilizer->walkingEmergencyStop();
-};
-
 bool StabilizerService_impl::dummy()
 {
 	std::cout << "StabilizerService: " << std::endl;
@@ -45,4 +40,4 @@ bool StabilizerService_impl::dummy()
 void StabilizerService_impl::stabilizer(Stabilizer *i_stabilizer)
 {
   m_stabilizer = i_stabilizer;
-} 
+}

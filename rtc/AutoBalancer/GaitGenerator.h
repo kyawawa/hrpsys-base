@@ -1075,7 +1075,7 @@ namespace rats
     coordinates initial_foot_mid_coords;
     bool solved;
     double leg_margin[4], stride_limitation_for_circle_type[4], overwritable_stride_limitation[4], footstep_modification_gain[2], cp_check_margin[2];
-    bool use_stride_limitation, is_emergency_walking[2], modify_footsteps;
+    bool use_stride_limitation, is_emergency_walking[2], modify_footsteps, is_cp_outside;
     stride_limitation_type default_stride_limitation_type;
 
     /* preview controller parameters */
@@ -1123,7 +1123,7 @@ namespace rats
         dt(_dt), all_limbs(_all_limbs), default_step_time(1.0), default_double_support_ratio_before(0.1), default_double_support_ratio_after(0.1), default_double_support_static_ratio_before(0.0), default_double_support_static_ratio_after(0.0), default_double_support_ratio_swing_before(0.1), default_double_support_ratio_swing_after(0.1), gravitational_acceleration(DEFAULT_GRAVITATIONAL_ACCELERATION),
         finalize_count(0), optional_go_pos_finalize_footstep_num(0), overwrite_footstep_index(0), overwritable_footstep_index_offset(1),
         velocity_mode_flg(VEL_IDLING), emergency_flg(IDLING),
-        use_inside_step_limitation(true), use_stride_limitation(false), modify_footsteps(false), default_stride_limitation_type(SQUARE),
+        use_inside_step_limitation(true), use_stride_limitation(false), modify_footsteps(false), default_stride_limitation_type(SQUARE), is_cp_outside(false),
         preview_controller_ptr(NULL) {
         swing_foot_zmp_offsets = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         prev_que_sfzos = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
@@ -1208,11 +1208,12 @@ namespace rats
       }
       _footstep_nodes_list.push_back(sns);
     };
-    void emergency_stop ()
+    void emergency_stop (int walking_emergency_flg = 1)
     {
       if (!footstep_nodes_list.empty()) {
         velocity_mode_flg = VEL_IDLING;
         emergency_flg = EMERGENCY_STOP;
+        if (walking_emergency_flg > 1) is_cp_outside = true;
       }
     };
     void reset_emergency_stop ()

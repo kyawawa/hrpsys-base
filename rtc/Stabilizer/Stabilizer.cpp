@@ -453,7 +453,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   }
   is_emergency = false;
   is_emergency_while_walking = false;
-  is_walking_emergency = false;
+  is_walking_emergency = 0;
   swing_collision_threshold = 160;
   swing_collision_direction = 0;
   reset_emergency_flag = false;
@@ -802,14 +802,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     if (reset_emergency_flag) {
       m_emergencySignal.data = 0;
       m_emergencySignalOut.write();
-      m_walkingStopSignal.data = false;
+      m_walkingStopSignal.data = 0;
       m_walkingStopSignalOut.write();
       reset_emergency_flag = false;
     } else if (is_emergency) {
       m_emergencySignal.data = 1;
       m_emergencySignalOut.write();
     } else if (is_walking_emergency) {
-      walkingEmergencyStop();
+        m_walkingStopSignal.data = is_walking_emergency;
+        m_walkingStopSignalOut.write();
+        reset_emergency_flag = true;
     }
     // emergencySignalWalking
     m_emergencySignalWalking.tm = m_qRef.tm;
@@ -820,12 +822,6 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   return RTC::RTC_OK;
 }
 
-
-void Stabilizer::walkingEmergencyStop() {
-    m_walkingStopSignal.data = true;
-    m_walkingStopSignalOut.write();
-    reset_emergency_flag = true;
-};
 
 void Stabilizer::getCurrentParameters ()
 {
@@ -1394,7 +1390,7 @@ void Stabilizer::calcStateForEmergencySignal()
     if (isContact(contact_states_index_map["rleg"]) && isContact(contact_states_index_map["lleg"])) support_leg = SimpleZMPDistributor::BOTH;
     else if (isContact(contact_states_index_map["rleg"])) support_leg = SimpleZMPDistributor::RLEG;
     else if (isContact(contact_states_index_map["lleg"])) support_leg = SimpleZMPDistributor::LLEG;
-    if (!is_walking || is_estop_while_walking) is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset);
+    if (!is_walking || is_estop_while_walking) is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
     if (is_walking) {
       switch (support_leg) {
       case SimpleZMPDistributor::BOTH:
@@ -1470,15 +1466,30 @@ void Stabilizer::calcStateForEmergencySignal()
       }
   }
   // collision of foot Check
-  bool is_foot_collided = false;
+  int is_foot_collided = 0;
   if (is_walking) {
       // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
       // else if (isContact(contact_states_index_map["lleg"])) swing_leg = "rleg";
       if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) {
-          int swing_leg = (contact_states[contact_states_index_map["rleg"]]) ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
+          // int swing_leg = (contact_states[contact_states_index_map["rleg"]]) ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
+          int swing_leg;
+          SimpleZMPDistributor::leg_type support_leg;
+          if (contact_states[contact_states_index_map["rleg"]]) {
+              swing_leg = contact_states_index_map["rleg"];
+              support_leg = SimpleZMPDistributor::RLEG;
+          } else {
+              swing_leg = contact_states_index_map["lleg"];
+              support_leg = SimpleZMPDistributor::LLEG;
+          }
           if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
-              is_foot_collided = true;
+              ++is_foot_collided;
               std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
+              Eigen::Vector2d tmp_cp;
+              for (size_t i = 0; i < 2; i++) {
+                  tmp_cp(i) = act_cp(i);
+              }
+              is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
+              if (is_cp_outside) ++is_foot_collided;
           }
       }
   }

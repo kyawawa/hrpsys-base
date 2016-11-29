@@ -140,13 +140,13 @@ void RobotHardwareService_impl::setServoGainPercentagePD(const char *jname, doub
     m_robot->setServoGainPercentagePD(jname, percentage, p, d);
 }
 
-void RobotHardwareService_impl::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& percentage, CORBA::Boolean p, CORBA::Boolean d)
+void RobotHardwareService_impl::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& percentage, CORBA::Boolean p, CORBA::Boolean d, CORBA::Boolean isout)
 {
     std::vector<double> gains(percentage.length());
     for (unsigned int i = 0; i < percentage.length(); ++i) {
         gains[i] = percentage[i];
     }
-    m_robot->setEachServoGainPercentagePD(jname, &gains.front(), p, d);
+    m_robot->setEachServoGainPercentagePD(jname, &gains.front(), p, d, isout);
 }
 
 void RobotHardwareService_impl::getServoPgainPercentage(::OpenHRP::RobotHardwareService::DblSequence_out _pgain)

@@ -90,7 +90,7 @@ module OpenHRP
     void setServoGainPercentage(in string name, in double percentage);
     void setEachServoGainPercentage(in string name, in DblSequence percentage);
     void setServoGainPercentagePD(in string name, in double percentage, in boolean p, in boolean d);
-    void setEachServoGainPercentagePD(in string name, in DblSequence percentage, in boolean p, in boolean d);
+    void setEachServoGainPercentagePD(in string name, in DblSequence percentage, in boolean p, in boolean d, in boolean isout);
     void getServoPgainPercentage(out DblSequence _pgain);
     void getServoDgainPercentage(out DblSequence _dgain);
 

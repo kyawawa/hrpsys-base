@@ -666,7 +666,7 @@ void RobotHardwareServicePort::setEachServoGainPercentage(const char *jname, con
 }
 void RobotHardwareServicePort::setServoGainPercentagePD(const char *jname, double i_percentage, bool p, bool d) {
 }
-void RobotHardwareServicePort::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d) {
+void RobotHardwareServicePort::setEachServoGainPercentagePD(const char *jname, const OpenHRP::RobotHardwareService::DblSequence& i_percentage, bool p, bool d, bool isout) {
 }
 
 void RobotHardwareServicePort::getServoPgainPercentage(OpenHRP::RobotHardwareService::DblSequence_out _pgain) {

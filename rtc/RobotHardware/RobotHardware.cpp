@@ -259,11 +259,11 @@ RTC::ReturnCode_t RobotHardware::onExecute(RTC::UniqueId ec_id)
   // m_robot->getServoDgainPercentage(&old_dgains.front());
   if (m_pgainRefIn.isNew()) {
       m_pgainRefIn.read();
-      m_robot->setEachServoGainPercentagePD("all", m_pgainRef.data.get_buffer(), true, false);
+      m_robot->setEachServoGainPercentagePD("all", m_pgainRef.data.get_buffer(), true, false, false);
   }
   if (m_dgainRefIn.isNew()) {
       m_dgainRefIn.read();
-      m_robot->setEachServoGainPercentagePD("all", m_dgainRef.data.get_buffer(), false, true);
+      m_robot->setEachServoGainPercentagePD("all", m_dgainRef.data.get_buffer(), false, true, false);
   }
   m_robot->getServoPgainPercentage(&pgains.front());
   m_robot->getServoDgainPercentage(&dgains.front());

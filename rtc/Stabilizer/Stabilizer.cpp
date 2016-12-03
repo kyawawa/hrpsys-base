@@ -669,6 +669,9 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       } else {
         calcTPCC();
       }
+      for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+          m_qSTRef.data[i] = m_robot->joint(i)->q;
+      }
       if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
       if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
       break;
@@ -1807,7 +1810,6 @@ void Stabilizer::gainControl(const double T)
         servo_pgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_pgain_percentage) / ((remain_swing_time) / dt); // need offset ?
         servo_dgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_dgain_percentage) / ((remain_swing_time) / dt);
         for (size_t i = 0; i < m_robot->numJoints(); ++i) {
-            m_qSTRef.data[i] = m_robot->joint(i)->q;
             m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
             m_robot->joint(i)->q += -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q) * dt;
         }

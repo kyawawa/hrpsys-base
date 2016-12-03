@@ -638,6 +638,9 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       } else {
         calcTPCC();
       }
+      for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+          m_qSTRef.data[i] = m_robot->joint(i)->q;
+      }
       if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
       if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
       break;

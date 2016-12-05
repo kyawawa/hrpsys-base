@@ -1685,10 +1685,14 @@ void Stabilizer::gainControl(const double T)
          || (isContact(0) && isContact(1)) ) { // Actual : double support phase
         servo_pgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_pgain_percentage) / ((remain_swing_time) / dt); // need offset ?
         servo_dgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_dgain_percentage) / ((remain_swing_time) / dt);
-        for (size_t i = 0; i < m_robot->numJoints(); ++i) {
-            m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
-            m_robot->joint(i)->q += -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q) * dt;
-        }
+        // for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+        //     m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
+        //     m_robot->joint(i)->q += -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q) * dt;
+        // }
+        // if (servo_pgain_percentage[i] < 100 || servo_dgain_percentage[i] < 100) {
+        //     m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
+        //     m_robot->joint(i)->q = m_qCurrent.data[i] + m_robot->joint(i)->dq * dt;
+        // }
     } else if (!is_swing_contact) {
         hrp::Link* link = m_robot->link(next_swing_ikp.target_name);
         for (int i = swing_joint_num - 1; i >= 0; --i, link = link->parent) {

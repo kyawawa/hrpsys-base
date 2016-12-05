@@ -597,7 +597,7 @@ namespace rats
             }
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             set_foot_emergency(true);
             coordinates tmp_start = get_swing_leg_steps()[0].worldcoords;
             coordinates tmp_goal = overwrite_footstep_nodes_list[0].front().worldcoords;

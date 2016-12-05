@@ -463,7 +463,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 
     if (m_walkingStopSignalIn.isNew()){
         m_walkingStopSignalIn.read();
-        if (!is_stop_mode) {
+        if (!is_stop_mode && m_walkingStopSignal.data != 0) {
             std::cerr << "[" << m_profile.instance_name << "] walkingStopSignal is set!" << std::endl;
             is_stop_mode = true;
             gg->emergency_stop();

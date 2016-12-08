@@ -584,7 +584,7 @@ namespace rats
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
             double first_step_time;
-            if (is_cp_outside) {
+            if (false) {
                 hrp::Vector3 act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
                 tmp_coords.pos[0] = act_cp(0);
                 tmp_coords.pos[1] = act_cp(1);

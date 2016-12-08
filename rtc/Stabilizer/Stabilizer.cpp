@@ -99,6 +99,9 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_currentBaseRpyOut("currentBaseRpy", m_currentBaseRpy),
     m_allRefWrenchOut("allRefWrench", m_allRefWrench),
     m_allEECompOut("allEEComp", m_allEEComp),
+    m_absActEEPosOut("absActEEPos", m_absActEEPos),
+    m_absActEEPosAccOut("absActEEPosAcc", m_absActEEPosAcc),
+    m_absActEERpyOut("absActEERpy", m_absActEERpy),
     m_qSTRefOut("qSTRef", m_qSTRef),
     m_debugDataOut("debugData", m_debugData),
     control_mode(MODE_IDLE),
@@ -172,6 +175,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("currentBaseRpy", m_currentBaseRpyOut);
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
+  addOutPort("absActEEPos", m_absActEEPosOut);
+  addOutPort("absActEEPosAcc", m_absActEEPosAccOut);
+  addOutPort("absActEERpy", m_absActEERpyOut);
   addOutPort("qSTRef", m_qSTRefOut);
   addOutPort("debugData", m_debugDataOut);
 
@@ -301,6 +307,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       ikp.d_pos_swing = hrp::Vector3::Zero();
       ikp.target_ee_diff_p_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.target_ee_diff_r_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
+      ikp.target_ee_pos_acc_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(300.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.prev_d_pos_swing = hrp::Vector3::Zero();
       ikp.prev_d_rpy_swing = hrp::Vector3::Zero();
       ikp.swing_servo_pgain_percentage = 40 * hrp::dvector::Ones(jpe_v.back()->numJoints());
@@ -320,6 +327,12 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       target_ee_R.push_back(hrp::Matrix33::Identity());
       act_ee_p.push_back(hrp::Vector3::Zero());
       act_ee_R.push_back(hrp::Matrix33::Identity());
+      abs_act_ee_p.push_back(hrp::Vector3::Zero());
+      prev_abs_act_ee_p.push_back(hrp::Vector3::Zero());
+      abs_act_ee_p_vel.push_back(hrp::Vector3::Zero());
+      prev_abs_act_ee_p_vel.push_back(hrp::Vector3::Zero());
+      abs_act_ee_p_acc.push_back(hrp::Vector3::Zero());
+      abs_act_ee_R.push_back(hrp::Matrix33::Identity());
       projected_normal.push_back(hrp::Vector3::Zero());
       act_force.push_back(hrp::Vector3::Zero());
       contact_states_index_map.insert(std::pair<std::string, size_t>(ee_name, i));
@@ -502,8 +515,26 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_originActCogVel.data.x = m_originActCogVel.data.y = m_originActCogVel.data.z = 0.0;
   m_allRefWrench.data.length(stikp.size() * 6); // 6 is wrench dim
   m_allEEComp.data.length(stikp.size() * 6); // 6 is pos+rot dim
+  m_absActEEPos.data.length(stikp.size() * 3);
+  m_absActEEPosAcc.data.length(stikp.size() * 3);
+  m_absActEERpy.data.length(stikp.size() * 3);
   m_debugData.data.length(1); m_debugData.data[0] = 0.0;
 
+  m_absForce.resize(npforce);
+  m_absForceOut.resize(npforce);
+  m_absForceCompensation.resize(npforce);
+  m_absForceCompensationOut.resize(npforce);
+  for (unsigned int i = 0; i < npforce; ++i) {
+      hrp::Sensor* sen = m_robot->sensor(hrp::Sensor::FORCE, i);
+      m_absForceOut[i] = new RTC::OutPort<RTC::TimedDoubleSeq>(("abs" + sen->name).c_str(), m_absForce[i]);
+      m_absForceCompensationOut[i] = new RTC::OutPort<RTC::TimedDoubleSeq>(("abs" + sen->name + "Compensation").c_str(), m_absForceCompensation[i]);
+      m_absForce[i].data.length(6);
+      m_absForceCompensation[i].data.length(6);
+      registerOutPort(("abs" + sen->name).c_str(), *m_absForceOut[i]);
+      registerOutPort(("abs" + sen->name + "Compensation").c_str(), *m_absForceCompensationOut[i]);
+      abs_sensor_force.push_back(hrp::dvector6::Zero());
+      abs_sensor_force_compensation.push_back(hrp::dvector6::Zero());
+  }
   //
   szd = new SimpleZMPDistributor(dt);
   std::vector<std::vector<Eigen::Vector2d> > support_polygon_vec;
@@ -759,17 +790,27 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_originActCogVel.tm = m_qRef.tm;
       m_originActCogVelOut.write();
       for (size_t i = 0; i < stikp.size(); i++) {
+          hrp::Vector3 abs_act_ee_rpy = hrp::rpyFromRot(abs_act_ee_R[i]);
           for (size_t j = 0; j < 3; j++) {
               m_allRefWrench.data[6*i+j] = stikp[i].ref_force(j);
               m_allRefWrench.data[6*i+j+3] = stikp[i].ref_moment(j);
               m_allEEComp.data[6*i+j] = stikp[i].d_foot_pos(j);
               m_allEEComp.data[6*i+j+3] = stikp[i].d_foot_rpy(j);
+              m_absActEEPos.data[3*i+j] = abs_act_ee_p[i](j);
+              m_absActEEPosAcc.data[3*i+j] = abs_act_ee_p_acc[i](j);
+              m_absActEERpy.data[3*i+j] = abs_act_ee_rpy(j);
           }
       }
       m_allRefWrench.tm = m_qRef.tm;
       m_allRefWrenchOut.write();
       m_allEEComp.tm = m_qRef.tm;
       m_allEECompOut.write();
+      m_absActEEPos.tm = m_qRef.tm;
+      m_absActEEPosOut.write();
+      m_absActEEPosAcc.tm = m_qRef.tm;
+      m_absActEEPosAccOut.write();
+      m_absActEERpy.tm = m_qRef.tm;
+      m_absActEERpyOut.write();
       m_actBaseRpy.data.r = act_base_rpy(0);
       m_actBaseRpy.data.p = act_base_rpy(1);
       m_actBaseRpy.data.y = act_base_rpy(2);
@@ -791,6 +832,16 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_debugDataOut.write();
     }
     m_qRefOut.write();
+    for (size_t i = 0; i < m_absForce.size(); ++i) {
+        for (size_t j = 0; j < m_absForce[i].data.length(); ++j) {
+            m_absForce[i].data[j] = abs_sensor_force[i](j);
+            m_absForceCompensation[i].data[j] = abs_sensor_force_compensation[i](j);
+        }
+        m_absForce[i].tm = m_qRef.tm;
+        m_absForceOut[i]->write();
+        m_absForceCompensation[i].tm = m_qRef.tm;
+        m_absForceCompensationOut[i]->write();
+    }
     if (use_servo_gain_control && is_walking) {
         for (size_t i = 0; i < m_robot->numJoints(); ++i) {
             m_pgainRef.data[i] = servo_pgain_percentage(i);
@@ -933,6 +984,13 @@ void Stabilizer::getActualParameters ()
       hrp::Vector3 _act_ee_p = target->p + target->R * stikp[i].localp;
       act_ee_p[i] = foot_origin_rot.transpose() * (_act_ee_p - foot_origin_pos);
       act_ee_R[i] = foot_origin_rot.transpose() * (target->R * stikp[i].localR);
+      prev_abs_act_ee_p[i] = abs_act_ee_p[i];
+      prev_abs_act_ee_p_vel[i] = abs_act_ee_p_vel[i];
+      abs_act_ee_p[i] = ref_foot_origin_pos + ref_foot_origin_rot * act_ee_p[i];
+      abs_act_ee_p_vel[i] = (abs_act_ee_p[i] - prev_abs_act_ee_p[i]) / dt;
+      abs_act_ee_p_acc[i] = (abs_act_ee_p_vel[i] - prev_abs_act_ee_p_vel[i]) / dt;
+      abs_act_ee_p_acc[i] = stikp[i].target_ee_pos_acc_filter->passFilter(abs_act_ee_p_acc[i]);
+      abs_act_ee_R[i] = ref_foot_origin_rot * act_ee_R[i];
     }
     // capture point
     act_cp = act_cog + act_cogvel * std::sqrt(std::max(0.0, (act_cog - act_zmp)(2)) / eefm_gravitational_acceleration);
@@ -1075,6 +1133,9 @@ void Stabilizer::getActualParameters ()
         hrp::Vector3 sensor_moment = (sensor->link->R * sensor->localR) * hrp::Vector3(m_wrenches[i].data[3], m_wrenches[i].data[4], m_wrenches[i].data[5]);
         //hrp::Vector3 ee_moment = ((sensor->link->R * sensor->localPos + sensor->link->p) - (target->R * ikp.localCOPPos + target->p)).cross(sensor_force) + sensor_moment;
         hrp::Vector3 ee_moment = ((sensor->link->R * sensor->localPos + sensor->link->p) - (target->R * ikp.localp + target->p)).cross(sensor_force) + sensor_moment;
+        abs_sensor_force[i].segment(0, 3) = sensor_force;
+        abs_sensor_force[i].segment(3, 3) = sensor_moment;
+        abs_sensor_force_compensation[i].segment(0, 3) = 0.665 * abs_act_ee_p_acc[i] + sensor_force;
         // <= Actual world frame
         // Convert force & moment as foot origin coords relative
         ikp.ref_moment = foot_origin_rot.transpose() * ikp.ref_moment;
@@ -1988,6 +2049,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.eefm_swing_rot_time_const.length(stikp.size());
   i_stp.eefm_ee_moment_limit.length(stikp.size());
   i_stp.eefm_ee_forcemoment_distribution_weight.length(stikp.size());
+  i_stp.eefm_ee_pos_acc_cutoff_freq.length(stikp.size());
   i_stp.swing_servo_pgain_percentage.length(stikp.size());
   i_stp.swing_servo_dgain_percentage.length(stikp.size());
   for (size_t j = 0; j < stikp.size(); j++) {
@@ -2022,6 +2084,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       }
       i_stp.eefm_pos_compensation_limit[j] = stikp[j].eefm_pos_compensation_limit;
       i_stp.eefm_rot_compensation_limit[j] = stikp[j].eefm_rot_compensation_limit;
+      i_stp.eefm_ee_pos_acc_cutoff_freq[j] = stikp[j].target_ee_pos_acc_filter->getCutOffFreq();
   }
   for (size_t i = 0; i < 3; i++) {
     i_stp.eefm_swing_pos_damping_gain[i] = eefm_swing_pos_damping_gain(i);
@@ -2199,7 +2262,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
        i_stp.eefm_swing_rot_spring_gain.length () == stikp.size() &&
        i_stp.eefm_swing_rot_time_const.length () == stikp.size() &&
        i_stp.eefm_ee_moment_limit.length () == stikp.size() &&
-       i_stp.eefm_ee_forcemoment_distribution_weight.length () == stikp.size()) {
+       i_stp.eefm_ee_forcemoment_distribution_weight.length () == stikp.size() &&
+       i_stp.eefm_ee_pos_acc_cutoff_freq.length() == stikp.size()) {
       is_damping_parameter_ok = true;
       for (size_t j = 0; j < stikp.size(); j++) {
           for (size_t i = 0; i < 3; i++) {
@@ -2217,6 +2281,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
           }
           stikp[j].eefm_pos_compensation_limit = i_stp.eefm_pos_compensation_limit[j];
           stikp[j].eefm_rot_compensation_limit = i_stp.eefm_rot_compensation_limit[j];
+          stikp[j].target_ee_pos_acc_filter->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[j]);
       }
   } else {
       is_damping_parameter_ok = false;
@@ -2265,6 +2330,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   for (size_t i = 0; i < stikp.size(); i++) {
       stikp[i].target_ee_diff_p_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
       stikp[i].target_ee_diff_r_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
+      stikp[i].target_ee_pos_acc_filter->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[i]);
       stikp[i].limb_length_margin = i_stp.limb_length_margin[i];
       for (size_t j = 0; j < stikp[i].swing_servo_pgain_percentage.size(); ++j) {
           stikp[i].swing_servo_pgain_percentage(j) = i_stp.swing_servo_pgain_percentage[i][j];
@@ -2355,6 +2421,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
                     << std::endl;
           std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
                     << "eefm_ee_forcemoment_distribution_weight = " << stikp[j].eefm_ee_forcemoment_distribution_weight.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "" << std::endl;
+          std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
+                    << "eefm_ee_pos_acc_cutoff_freq = " << stikp[j].target_ee_pos_acc_filter->getCutOffFreq() << "[Hz]" << std::endl;
       }
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   eefm damping parameters cannot be set because of invalid param." << std::endl;

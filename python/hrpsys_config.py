@@ -892,12 +892,18 @@ class HrpsysConfigurator(object):
             self.connectLoggerPort(self.st, 'originActCogVel')
             self.connectLoggerPort(self.st, 'allRefWrench')
             self.connectLoggerPort(self.st, 'allEEComp')
+            self.connectLoggerPort(self.st, 'absActEEPos')
+            self.connectLoggerPort(self.st, 'absActEEPosAcc')
+            self.connectLoggerPort(self.st, 'absActEERpy')
             self.connectLoggerPort(self.st, 'q')
             self.connectLoggerPort(self.st, 'qSTRef')
             self.connectLoggerPort(self.st, 'actBaseRpy')
             self.connectLoggerPort(self.st, 'currentBasePos')
             self.connectLoggerPort(self.st, 'currentBaseRpy')
             self.connectLoggerPort(self.st, 'debugData')
+            for sen in self.sensors:
+                self.connectLoggerPort(self.st, "abs" + sen.name)
+                self.connectLoggerPort(self.st, "abs" + sen.name + "Compensation")
         if self.el != None:
             self.connectLoggerPort(self.el, 'q')
         if self.rh != None:

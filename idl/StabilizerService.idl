@@ -186,6 +186,8 @@ module OpenHRP
       DblArray3 eefm_swing_pos_damping_gain;
       /// Sequence of all end-effector force/moment distribution weight
       sequence<sequence<double, 6> > eefm_ee_forcemoment_distribution_weight;
+      /// Pos acc cutoff freq [Hz]
+      sequence<double> eefm_ee_pos_acc_cutoff_freq;
       // common
       /// Current Stabilizer algorithm
       STAlgorithm st_algorithm;

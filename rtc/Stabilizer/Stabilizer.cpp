@@ -149,7 +149,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("currentBaseRpy", m_currentBaseRpyOut);
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
-  addOutPort("q", m_qSTRefOut);
+  addOutPort("qSTRef", m_qSTRefOut);
   addOutPort("debugData", m_debugDataOut);
 
   // Set service provider to Ports

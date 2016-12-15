@@ -223,34 +223,43 @@ namespace rats
          it1 != swing_leg_src_steps.end() && it2 != swing_leg_dst_steps.end();
          it1++, it2++) {
       coordinates ret;
-      switch (default_orbit_type) {
-      case SHUFFLING:
-        mid_coords(ret, swing_rot_ratio, it1->worldcoords, it2->worldcoords);
-        break;
-      case CYCLOID:
-        cycloid_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
-        break;
-      case RECTANGLE:
-        rectangle_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx);
-        break;
-      case STAIR:
-        stair_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
-        break;
-      case CYCLOIDDELAY:
-        if (get_foot_emergency()) {
-            cycloid_delay_midcoords(ret, tmp_start, tmp_goal, 0, swing_trajectory_generator_idx);
-        } else {
-            cycloid_delay_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx);
-        }
-        break;
-      case CYCLOIDDELAYKICK:
-        cycloid_delay_kick_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
-        break;
-      case CROSS:
-        cross_delay_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, it1->l_r);
-        break;
-      default: break;
+      // 4足に対応する必要
+      // -> dhtg の path を複数に対応?
+      // -> 既に対応してそう
+      // -> どうやってpointsに入れるか
+      if (get_foot_emergency()) {
+          path_midcoords(ret, tmp_start, tmp_goal, 0, swing_trajectory_generator_idx, default_orbit_type);
+      } else {
+          path_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx, default_orbit_type);
       }
+      // switch (default_orbit_type) {
+      // case SHUFFLING:
+      //   mid_coords(ret, swing_rot_ratio, it1->worldcoords, it2->worldcoords);
+      //   break;
+      // case CYCLOID:
+      //   cycloid_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
+      //   break;
+      // case RECTANGLE:
+      //   rectangle_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx);
+      //   break;
+      // case STAIR:
+      //   stair_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
+      //   break;
+      // case CYCLOIDDELAY:
+      //   if (get_foot_emergency()) {
+      //       cycloid_delay_midcoords(ret, tmp_start, tmp_goal, 0, swing_trajectory_generator_idx);
+      //   } else {
+      //       cycloid_delay_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx);
+      //   }
+      //   break;
+      // case CYCLOIDDELAYKICK:
+      //   cycloid_delay_kick_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height);
+      //   break;
+      // case CROSS:
+      //   cross_delay_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, it1->l_r);
+      //   break;
+      // default: break;
+      // }
       swing_trajectory_generator_idx++;
       if (std::fabs(step_height) > 1e-3*10) {
           if (swing_leg_src_steps.size() == 1) /* only biped or crawl because there is only one toe_heel_interpolator */
@@ -384,49 +393,57 @@ namespace rats
       org_coords = new_coords;
   };
 
-  void leg_coords_generator::cycloid_midcoords (coordinates& ret, const coordinates& start,
-                                                                const coordinates& goal, const double height) const
+  void leg_coords_generator::path_midcoords(coordinates& ret, const coordinates& start,
+                                            const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx,
+                                            const orbit_type current_orbit_type)
   {
     mid_coords(ret, swing_rot_ratio, start, goal);
-    cycloid_midpoint (ret.pos, swing_ratio, start.pos, goal.pos, height, default_top_ratio);
+    dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type);
   };
 
-  void leg_coords_generator::rectangle_midcoords (coordinates& ret, const coordinates& start,
-                                                  const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx)
-  {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    rdtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
-  };
+  // void leg_coords_generator::cycloid_midcoords (coordinates& ret, const coordinates& start,
+  //                                                               const coordinates& goal, const double height) const
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   cycloid_midpoint (ret.pos, swing_ratio, start.pos, goal.pos, height, default_top_ratio);
+  // };
 
-  void leg_coords_generator::stair_midcoords (coordinates& ret, const coordinates& start,
-                                                              const coordinates& goal, const double height)
-  {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    sdtg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
-  };
+  // void leg_coords_generator::rectangle_midcoords (coordinates& ret, const coordinates& start,
+  //                                                 const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx)
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   rdtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
+  // };
 
-  void leg_coords_generator::cycloid_delay_midcoords (coordinates& ret, const coordinates& start,
-                                                      const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx)
-  {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    cdtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
-  };
+  // void leg_coords_generator::stair_midcoords (coordinates& ret, const coordinates& start,
+  //                                                             const coordinates& goal, const double height)
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   sdtg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
+  // };
 
-  void leg_coords_generator::cycloid_delay_kick_midcoords (coordinates& ret, const coordinates& start,
-                                                                      const coordinates& goal, const double height)
-  {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    cdktg.set_start_rot(hrp::Matrix33(start.rot));
-    cdktg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
-  };
+  // void leg_coords_generator::cycloid_delay_midcoords (coordinates& ret, const coordinates& start,
+  //                                                     const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx)
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   cdtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
+  // };
 
-  void leg_coords_generator::cross_delay_midcoords (coordinates& ret, const coordinates& start,
-                                                    const coordinates& goal, const double height, leg_type lr)
-  {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    crdtg.set_swing_leg(lr);
-    crdtg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
-  };
+  // void leg_coords_generator::cycloid_delay_kick_midcoords (coordinates& ret, const coordinates& start,
+  //                                                                     const coordinates& goal, const double height)
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   cdktg.set_start_rot(hrp::Matrix33(start.rot));
+  //   cdktg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
+  // };
+
+  // void leg_coords_generator::cross_delay_midcoords (coordinates& ret, const coordinates& start,
+  //                                                   const coordinates& goal, const double height, leg_type lr)
+  // {
+  //   mid_coords(ret, swing_rot_ratio, start, goal);
+  //   crdtg.set_swing_leg(lr);
+  //   crdtg.get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height);
+  // };
 
   bool leg_coords_generator::is_same_footstep_nodes(const std::vector<step_node>& fns_1, const std::vector<step_node>& fns_2) const
   {
@@ -471,11 +488,7 @@ namespace rats
       if (get_foot_emergency()) {
         set_foot_emergency(false);
       }
-      // debug
-      std::cerr << "footstep_index: " << footstep_index << std::endl;
-      std::cerr << "fnsl size: " << fnsl.size() << std::endl;
-      std::cerr << "lcg_count: " << lcg_count << std::endl;
-      if (footstep_index < fnsl.size() - 1) { // overwriteした時にlcg_countが変わらないせいでここが反映されない ?
+      if (footstep_index < fnsl.size() - 1) {
         current_step_height = fnsl[footstep_index].front().step_height;
         current_toe_angle = fnsl[footstep_index].front().toe_angle;
         current_heel_angle = fnsl[footstep_index].front().heel_angle;
@@ -490,27 +503,30 @@ namespace rats
         next_one_step_count = static_cast<size_t>(fnsl[footstep_index+1].front().step_time/dt);
       }
       lcg_count = one_step_count;
-      switch (default_orbit_type) {
-      case RECTANGLE:
-          for (size_t i = 0; i < rdtg.size(); i++)
-              rdtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
-          break;
-      case STAIR:
-          sdtg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
-          break;
-      case CYCLOIDDELAY:
-          for (size_t i = 0; i < cdtg.size(); i++)
-              cdtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
-          break;
-      case CYCLOIDDELAYKICK:
-          cdktg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
-          break;
-      case CROSS:
-          crdtg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
-          break;
-      default:
-          break;
+      for (size_t i = 0; i < dhtg.size(); i++) {
+          dhtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
       }
+      // switch (default_orbit_type) {
+      // case RECTANGLE:
+      //     for (size_t i = 0; i < rdtg.size(); i++)
+      //         rdtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+      //     break;
+      // case STAIR:
+      //     sdtg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+      //     break;
+      // case CYCLOIDDELAY:
+      //     for (size_t i = 0; i < cdtg.size(); i++)
+      //         cdtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+      //     break;
+      // case CYCLOIDDELAYKICK:
+      //     cdktg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+      //     break;
+      // case CROSS:
+      //     crdtg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+      //     break;
+      // default:
+      //     break;
+      // }
       std::cerr << "lcg_count is zero" << std::endl;
       reset_foot_ratio_interpolator();
     }
@@ -618,7 +634,7 @@ namespace rats
         is_cp_outside = false;
         print_footstep_nodes_list();
         //  else {
-        //     initialize_gait_parameter(cog, lcg.get_support_leg_steps(), lcg.get_swing_leg_dst_steps());
+        //     initializ e_gait_parameter(cog, lcg.get_support_leg_steps(), lcg.get_swing_leg_dst_steps());
         //     set_foot_emergency(true);
         //     coordinates tmp_start = get_swing_leg_steps()[0].worldcoords;
         //     coordinates tmp_goal = get_swing_leg_steps()[0].worldcoords;

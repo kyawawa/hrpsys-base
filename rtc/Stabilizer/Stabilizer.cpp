@@ -307,7 +307,12 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       ikp.d_pos_swing = hrp::Vector3::Zero();
       ikp.target_ee_diff_p_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.target_ee_diff_r_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
-      ikp.target_ee_pos_acc_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(300.0, dt, hrp::Vector3::Zero())); // [Hz]
+      ikp.target_ee_pos_acc_filter.resize(3);
+      for (size_t j = 0; j < 3; ++j) {
+          ikp.target_ee_pos_acc_filter[j] = IIRFilterPtr(new IIRFilter());
+          ikp.target_ee_pos_acc_filter[j]->setDataHZ(1.0 / dt);
+          ikp.target_ee_pos_acc_filter[j]->setCutOffFreq(10.0); // [Hz]
+      }
       ikp.prev_d_pos_swing = hrp::Vector3::Zero();
       ikp.prev_d_rpy_swing = hrp::Vector3::Zero();
       ikp.swing_servo_pgain_percentage = 40 * hrp::dvector::Ones(jpe_v.back()->numJoints());
@@ -989,7 +994,9 @@ void Stabilizer::getActualParameters ()
       abs_act_ee_p[i] = ref_foot_origin_pos + ref_foot_origin_rot * act_ee_p[i];
       abs_act_ee_p_vel[i] = (abs_act_ee_p[i] - prev_abs_act_ee_p[i]) / dt;
       abs_act_ee_p_acc[i] = (abs_act_ee_p_vel[i] - prev_abs_act_ee_p_vel[i]) / dt;
-      abs_act_ee_p_acc[i] = stikp[i].target_ee_pos_acc_filter->passFilter(abs_act_ee_p_acc[i]);
+      for (size_t j = 0; j < 3; ++j) {
+          abs_act_ee_p_acc[i](j) = stikp[i].target_ee_pos_acc_filter[j]->passFilter(abs_act_ee_p_acc[i](j));
+      }
       abs_act_ee_R[i] = ref_foot_origin_rot * act_ee_R[i];
     }
     // capture point
@@ -2063,6 +2070,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       i_stp.eefm_swing_rot_time_const[j].length(3);
       i_stp.eefm_ee_moment_limit[j].length(3);
       i_stp.eefm_ee_forcemoment_distribution_weight[j].length(6);
+      i_stp.eefm_ee_pos_acc_cutoff_freq[j].length(3);
       i_stp.swing_servo_pgain_percentage[j].length(jpe_v[j]->numJoints());
       i_stp.swing_servo_dgain_percentage[j].length(jpe_v[j]->numJoints());
       for (size_t i = 0; i < 3; i++) {
@@ -2077,6 +2085,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
           i_stp.eefm_ee_moment_limit[j][i] = stikp[j].eefm_ee_moment_limit(i);
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i] = stikp[j].eefm_ee_forcemoment_distribution_weight(i);
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i+3] = stikp[j].eefm_ee_forcemoment_distribution_weight(i+3);
+          i_stp.eefm_ee_pos_acc_cutoff_freq[j][i] = stikp[j].target_ee_pos_acc_filter[i]->getCutOffFreq();
       }
       for (size_t i = 0; i < jpe_v[j]->numJoints(); ++i) {
           i_stp.swing_servo_pgain_percentage[j][i] = stikp[j].swing_servo_pgain_percentage(i);
@@ -2084,7 +2093,6 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       }
       i_stp.eefm_pos_compensation_limit[j] = stikp[j].eefm_pos_compensation_limit;
       i_stp.eefm_rot_compensation_limit[j] = stikp[j].eefm_rot_compensation_limit;
-      i_stp.eefm_ee_pos_acc_cutoff_freq[j] = stikp[j].target_ee_pos_acc_filter->getCutOffFreq();
   }
   for (size_t i = 0; i < 3; i++) {
     i_stp.eefm_swing_pos_damping_gain[i] = eefm_swing_pos_damping_gain(i);
@@ -2278,10 +2286,10 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
               stikp[j].eefm_ee_moment_limit(i) = i_stp.eefm_ee_moment_limit[j][i];
               stikp[j].eefm_ee_forcemoment_distribution_weight(i) = i_stp.eefm_ee_forcemoment_distribution_weight[j][i];
               stikp[j].eefm_ee_forcemoment_distribution_weight(i+3) = i_stp.eefm_ee_forcemoment_distribution_weight[j][i+3];
+              stikp[j].target_ee_pos_acc_filter[i]->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[j][i]);
           }
           stikp[j].eefm_pos_compensation_limit = i_stp.eefm_pos_compensation_limit[j];
           stikp[j].eefm_rot_compensation_limit = i_stp.eefm_rot_compensation_limit[j];
-          stikp[j].target_ee_pos_acc_filter->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[j]);
       }
   } else {
       is_damping_parameter_ok = false;
@@ -2330,7 +2338,6 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   for (size_t i = 0; i < stikp.size(); i++) {
       stikp[i].target_ee_diff_p_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
       stikp[i].target_ee_diff_r_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
-      stikp[i].target_ee_pos_acc_filter->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[i]);
       stikp[i].limb_length_margin = i_stp.limb_length_margin[i];
       for (size_t j = 0; j < stikp[i].swing_servo_pgain_percentage.size(); ++j) {
           stikp[i].swing_servo_pgain_percentage(j) = i_stp.swing_servo_pgain_percentage[i][j];
@@ -2422,7 +2429,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
           std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
                     << "eefm_ee_forcemoment_distribution_weight = " << stikp[j].eefm_ee_forcemoment_distribution_weight.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "" << std::endl;
           std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
-                    << "eefm_ee_pos_acc_cutoff_freq = " << stikp[j].target_ee_pos_acc_filter->getCutOffFreq() << "[Hz]" << std::endl;
+                    << "eefm_ee_pos_acc_cutoff_freq = " << stikp[j].target_ee_pos_acc_filter[0]->getCutOffFreq() << "[Hz]" << std::endl;
       }
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   eefm damping parameters cannot be set because of invalid param." << std::endl;

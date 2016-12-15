@@ -277,6 +277,7 @@ class Stabilizer
   // </rtc-template>
 
  private:
+  typedef boost::shared_ptr<IIRFilter> IIRFilterPtr;
   // Stabilizer Parameters
   struct STIKParam {
     std::string target_name; // Name of end link
@@ -294,7 +295,8 @@ class Stabilizer
     hrp::dvector6 eefm_ee_forcemoment_distribution_weight;
     double swing_support_gain, support_time;
     // For swing ee modification
-    boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> > target_ee_diff_p_filter, target_ee_diff_r_filter, target_ee_pos_acc_filter;
+    boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> > target_ee_diff_p_filter, target_ee_diff_r_filter;
+    std::vector<IIRFilterPtr> target_ee_pos_acc_filter;
     hrp::Vector3 target_ee_diff_p, d_pos_swing, d_rpy_swing, prev_d_pos_swing, prev_d_rpy_swing;
     hrp::Matrix33 target_ee_diff_r;
     // IK parameter

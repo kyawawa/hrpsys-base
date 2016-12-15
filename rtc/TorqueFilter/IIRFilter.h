@@ -51,6 +51,7 @@ public:
     */
     bool setParameter(int dim, std::vector<double>& A, std::vector<double>& B);
 
+    bool setSecondButterworthParameter(const double fc_in);
     /**
      */
     void getParameter(int &dim, std::vector<double>&A, std::vector<double>& B);
@@ -71,6 +72,13 @@ public:
     */
     double passFilter(double input);
     // double getCurrentValue () const { return m_prev_output; };
+
+    void setDataHZ(const double _hz) { m_hz = _hz; };
+    bool setCutOffFreq(const double fc)
+    {
+        return setSecondButterworthParameter(fc);
+    };
+    double getCutOffFreq () const { return m_cutoff_freq; };
 private:
     // Configuration variable declaration
     // <rtc-template block="config_declare">
@@ -81,6 +89,8 @@ private:
     // double m_prev_output;
     bool m_initialized;
     std::string m_error_prefix;
+    int m_hz;
+    double m_cutoff_freq;
 };
 
 /**

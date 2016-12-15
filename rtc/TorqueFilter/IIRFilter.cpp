@@ -18,6 +18,10 @@ IIRFilter::IIRFilter(unsigned int dim, std::vector<double>& fb_coeffs, std::vect
         m_ff_coefficients.push_back(*it);
     }
 
+    // init frequency
+    m_cutoff_freq = 10.0;
+    m_hz = 500.0;
+
     // init previous values
     m_previous_values.assign(dim, 0.0);
     m_initialized = true;
@@ -25,7 +29,7 @@ IIRFilter::IIRFilter(unsigned int dim, std::vector<double>& fb_coeffs, std::vect
 }
 
 IIRFilter::IIRFilter(const std::string& error_prefix) :
-    m_initialized(false) {
+    m_initialized(false), m_hz(500.0), m_cutoff_freq(10.0) {
     m_error_prefix = error_prefix;
 }
 
@@ -63,6 +67,20 @@ bool IIRFilter::setParameter(int dim, std::vector<double>& A, std::vector<double
     m_previous_values.assign(dim, 0.0);
     m_initialized = true;
     return true;
+}
+
+bool IIRFilter::setSecondButterworthParameter(const double fc_in)
+{
+    m_cutoff_freq = fc_in;
+    double fc = tan(fc_in * M_PI / m_hz) / (2 * M_PI);
+    double denom = 1 + (2 * sqrt(2) * M_PI * fc) + 4 * M_PI * M_PI * fc*fc;
+    std::vector<double> ff_coeffs(3), fb_coeffs(3);
+    ff_coeffs[0] = ff_coeffs[2] = (4 * M_PI * M_PI * fc*fc) / denom;
+    ff_coeffs[1] = (8 * M_PI * M_PI * fc*fc) / denom;
+    fb_coeffs[0] = 1.0;
+    fb_coeffs[1] = (8 * M_PI * M_PI * fc*fc - 2) / denom;
+    fb_coeffs[2] = (1 - (2 * sqrt(2) * M_PI * fc) + 4 * M_PI * M_PI * fc*fc) / denom;
+    return setParameter(2, fb_coeffs, ff_coeffs);
 }
 
 void IIRFilter::getParameter(int &dim, std::vector<double>& A, std::vector<double>& B)

@@ -397,8 +397,9 @@ namespace rats
                                             const coordinates& goal, const double height, const size_t swing_trajectory_generator_idx,
                                             const orbit_type current_orbit_type)
   {
-    mid_coords(ret, swing_rot_ratio, start, goal);
-    dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type);
+      mid_coords(ret, swing_rot_ratio, start, goal);
+      dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type);
+      foot_acc = dhtg[swing_trajectory_generator_idx].get_acc();
   };
 
   // void leg_coords_generator::cycloid_midcoords (coordinates& ret, const coordinates& start,

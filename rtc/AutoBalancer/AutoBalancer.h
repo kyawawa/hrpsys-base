@@ -177,6 +177,8 @@ class AutoBalancer
   OutPort<TimedBoolean> m_walkingStatesOut;
   TimedPoint3D m_sbpCogOffset;
   OutPort<TimedPoint3D> m_sbpCogOffsetOut;
+  TimedPoint3D m_footAccRef;
+  OutPort<TimedPoint3D> m_footAccRefOut;
   std::vector<TimedDoubleSeq> m_force;
   std::vector<OutPort<TimedDoubleSeq> *> m_ref_forceOut;
   std::vector<TimedPoint3D> m_limbCOPOffset;
@@ -241,6 +243,7 @@ class AutoBalancer
   typedef boost::shared_ptr<rats::gait_generator> ggPtr;
   ggPtr gg;
   bool gg_is_walking, gg_solved;
+  hrp::Vector3 foot_acc_ref;
   // for abc
   hrp::Vector3 ref_cog, ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
   enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;

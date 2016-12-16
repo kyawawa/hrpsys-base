@@ -400,12 +400,26 @@ namespace rats
       // Implement hoffarbib to configure remain_time;
       void hoffarbib_interpolation (double& _pos, double& _vel, double& _acc, const double tmp_remain_time, const double tmp_goal, const double tmp_goal_vel = 0, const double tmp_goal_acc = 0)
       {
-        double jerk = (-9.0/ tmp_remain_time) * (_acc - tmp_goal_acc / 3.0) +
-            (-36.0 / (tmp_remain_time * tmp_remain_time)) * (tmp_goal_vel * 2.0 / 3.0 + _vel) +
-            (60.0 / (tmp_remain_time * tmp_remain_time * tmp_remain_time)) * (tmp_goal - _pos);
-        _acc = _acc + dt * jerk;
-        _vel = _vel + dt * _acc;
-        _pos = _pos + dt * _vel;
+        // double jerk = (-9.0/ tmp_remain_time) * (_acc - tmp_goal_acc / 3.0) +
+        //     (-36.0 / (tmp_remain_time * tmp_remain_time)) * (tmp_goal_vel * 2.0 / 3.0 + _vel) +
+        //     (60.0 / (tmp_remain_time * tmp_remain_time * tmp_remain_time)) * (tmp_goal - _pos);
+        // _pos = _pos + dt * _vel + dt * dt * _acc / 2 + dt * dt * dt * jerk / 6;
+        // _vel = _vel + dt * _acc + dt * dt * jerk / 2;
+        // _acc = _acc + dt * jerk;
+
+        double delta_pos = tmp_goal - _pos;
+        double D2 = tmp_remain_time * tmp_remain_time;
+        double a1 = tmp_remain_time * _vel;
+        double a2 = D2 * _acc / 2.0;
+        double a3 = D2 / 2.0 * (tmp_goal_acc - 3 * _acc) - tmp_remain_time * (4 * tmp_goal_vel + 6 * _vel) + 10.0 * delta_pos;
+        double a4 = -D2 * (tmp_goal_acc - 3.0 / 2.0 * _acc) + tmp_remain_time * (7.0 * tmp_goal_vel + 8.0 * _vel) - 15.0 * delta_pos;
+        double a5 = D2 / 2.0 * (tmp_goal_acc - _acc) - 3.0 * tmp_remain_time * (tmp_goal_vel + _vel) + 6.0 * delta_pos;
+        double tau = dt / tmp_remain_time;
+
+        _acc = 2.0 * a2 / D2 + 6.0 * a3 / D2 * tau + 12.0 * a4 / D2 * tau*tau + 20.0 * a5 / D2 * tau*tau*tau;
+        _vel = a1 / tmp_remain_time + 2.0 * a2 / tmp_remain_time * tau + 3.0 * a3 / tmp_remain_time * tau*tau +
+            4.0 * a4 / tmp_remain_time * tau*tau*tau + 5.0 * a5 / tmp_remain_time * tau*tau*tau*tau;
+        _pos = _pos + a1 * tau + a2 * tau*tau + a3 * tau*tau*tau + a4 * tau*tau*tau*tau + a5 * tau*tau*tau*tau*tau;
       };
     protected:
       double time_offset; // [s]
@@ -471,7 +485,7 @@ namespace rats
               size_t tmp_time_offset_count = time_offset/dt;
               //size_t final_path_count = 0; // Revert to previous version
               size_t final_path_count = final_path_distance_ratio * swing_one_step_count;
-              if (final_path_count>static_cast<size_t>(time_offset_xy2z/dt)) final_path_count = static_cast<size_t>(time_offset_xy2z/dt);
+              if (final_path_count > static_cast<size_t>(time_offset_xy2z/dt)) final_path_count = static_cast<size_t>(time_offset_xy2z/dt);
               // XY interpolation
               if (swing_remain_count > final_path_count+tmp_time_offset_count) { // antecedent path is still interpolating
                   hrp::Vector3 tmpgoal = interpolate_antecedent_path((swing_one_step_count - swing_remain_count) / static_cast<double>(swing_one_step_count - (final_path_count+tmp_time_offset_count)));
@@ -506,6 +520,7 @@ namespace rats
       };
       hrp::Vector3 get_pos() const { return pos; };
       void set_pos(hrp::Vector3 _pos) { pos = _pos; };
+      hrp::Vector3 get_acc() const { return acc; };
       double get_swing_trajectory_delay_time_offset () const { return time_offset; };
       double get_swing_trajectory_final_distance_weight () const { return final_distance_weight; };
       double get_swing_trajectory_time_offset_xy2z () const { return time_offset_xy2z; };
@@ -806,6 +821,7 @@ namespace rats
       toe_heel_type current_src_toe_heel_type, current_dst_toe_heel_type;
       bool foot_emergency;
       coordinates tmp_start, tmp_goal;
+      hrp::Vector3 foot_acc;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -845,6 +861,7 @@ namespace rats
         sdtg.set_dt(dt);
         cdktg.set_dt(dt);
         crdtg.set_dt(dt);
+        foot_acc = hrp::Vector3::Zero();
         if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt);
         if (swing_foot_rot_ratio_interpolator == NULL) swing_foot_rot_ratio_interpolator = new interpolator(1, dt);
         //if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt, interpolator::LINEAR);
@@ -1119,6 +1136,7 @@ namespace rats
       double get_swing_trajectory_delay_time_offset () const { return time_offset; };
       double get_swing_trajectory_final_distance_weight () const { return final_distance_weight; };
       double get_swing_trajectory_time_offset_xy2z () const { return time_offset_xy2z; };
+      hrp::Vector3 get_foot_acc_ref () const { return foot_acc; };
       hrp::Vector3 get_stair_trajectory_way_point_offset () const { return sdtg.get_stair_trajectory_way_point_offset(); };
       hrp::Vector3 get_cycloid_delay_kick_point_offset () const { return cdktg.get_cycloid_delay_kick_point_offset() ; };
       double get_toe_pos_offset_x () const { return toe_pos_offset_x; };
@@ -1583,6 +1601,7 @@ namespace rats
     bool get_use_toe_joint () const { return lcg.get_use_toe_joint(); };
     double get_current_toe_heel_ratio () const { return lcg.get_current_toe_heel_ratio(get_use_toe_heel_transition()); };
     bool get_foot_emergency () const { return lcg.get_foot_emergency(); };
+    hrp::Vector3 get_foot_acc_ref () const { return lcg.get_foot_acc_ref(); };
     void get_leg_default_translate_pos (std::vector<hrp::Vector3>& off) const { off = footstep_param.leg_default_translate_pos; };
     size_t get_overwritable_footstep_index_offset () const { return overwritable_footstep_index_offset; };
     const std::vector<leg_type> calc_counter_leg_types_from_footstep_nodes (const std::vector<step_node>& fns, std::vector<std::string> _all_limbs) const;

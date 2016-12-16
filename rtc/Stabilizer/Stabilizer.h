@@ -183,6 +183,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_dgainCurrent;
   RTC::TimedDoubleSeq m_pgainRef;
   RTC::TimedDoubleSeq m_dgainRef;
+  RTC::TimedPoint3D m_footAccRef;
   // for debug ouput
   RTC::TimedPoint3D m_originRefZmp, m_originRefCog, m_originRefCogVel, m_originNewZmp;
   RTC::TimedPoint3D m_originActZmp, m_originActCog, m_originActCogVel;
@@ -215,6 +216,7 @@ class Stabilizer
   RTC::InPort<RTC::TimedPoint3D> m_sbpCogOffsetIn;
   RTC::InPort<RTC::TimedDoubleSeq> m_pgainCurrentIn;
   RTC::InPort<RTC::TimedDoubleSeq> m_dgainCurrentIn;
+  RTC::InPort<RTC::TimedPoint3D> m_footAccRefIn;
 
   std::vector<RTC::TimedDoubleSeq> m_wrenches;
   std::vector<RTC::InPort<RTC::TimedDoubleSeq> *> m_wrenchesIn;
@@ -362,6 +364,7 @@ class Stabilizer
   OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
   hrp::dvector servo_pgain_percentage, servo_dgain_percentage;
   double gain_control_time_const;
+  hrp::Vector3 foot_acc_ref;
 };
 
 

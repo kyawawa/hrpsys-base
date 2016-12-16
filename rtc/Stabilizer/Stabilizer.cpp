@@ -70,6 +70,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_sbpCogOffsetIn("sbpCogOffset", m_sbpCogOffset),
     m_pgainCurrentIn("pgainCurrent", m_pgainCurrent),
     m_dgainCurrentIn("dgainCurrent", m_dgainCurrent),
+    m_footAccRefIn("footAccRef", m_footAccRef),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -144,6 +145,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("sbpCogOffset", m_sbpCogOffsetIn);
   addInPort("pgainCurrent", m_pgainCurrentIn);
   addInPort("dgainCurrent", m_dgainCurrentIn);
+  addInPort("footAccRef", m_footAccRefIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -447,6 +449,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   servo_pgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
   servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
   gain_control_time_const = 0.4;
+  foot_acc_ref = hrp::Vector3::Zero();
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -686,6 +689,12 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     for (size_t i = 0; i < m_robot->numJoints(); ++i) {
         servo_dgain_percentage(i) = m_dgainCurrent.data[i];
     }
+  }
+  if (m_footAccRefIn.isNew()) {
+      m_footAccRefIn.read();
+      foot_acc_ref(0) = m_footAccRef.data.x;
+      foot_acc_ref(1) = m_footAccRef.data.y;
+      foot_acc_ref(2) = m_footAccRef.data.z;
   }
 
   if (is_legged_robot) {
@@ -1142,7 +1151,8 @@ void Stabilizer::getActualParameters ()
         hrp::Vector3 ee_moment = ((sensor->link->R * sensor->localPos + sensor->link->p) - (target->R * ikp.localp + target->p)).cross(sensor_force) + sensor_moment;
         abs_sensor_force[i].segment(0, 3) = sensor_force;
         abs_sensor_force[i].segment(3, 3) = sensor_moment;
-        abs_sensor_force_compensation[i].segment(0, 3) = 0.665 * abs_act_ee_p_acc[i] + sensor_force;
+        if (!contact_states[i]) abs_sensor_force_compensation[i].segment(0, 3) = 0.665 * foot_acc_ref + sensor_force;
+        // abs_sensor_force_compensation[i].segment(0, 3) = 0.665 * abs_act_ee_p_acc[i] + sensor_force;
         // <= Actual world frame
         // Convert force & moment as foot origin coords relative
         ikp.ref_moment = foot_origin_rot.transpose() * ikp.ref_moment;

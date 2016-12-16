@@ -395,6 +395,7 @@ class HrpsysConfigurator(object):
             connectPorts(self.abc.port("walkingStates"), self.st.port("walkingStates"))
             connectPorts(self.abc.port("sbpCogOffset"), self.st.port("sbpCogOffset"))
             connectPorts(self.abc.port("toeheelRatio"), self.st.port("toeheelRatio"))
+            connectPorts(self.abc.port("footAccRef"), self.st.port("footAccRef"))
             if self.es:
                 connectPorts(self.st.port("emergencySignal"), self.es.port("emergencySignal"))
                 connectPorts(self.st.port("emergencySignalWalking"), self.abc.port("emergencySignalWalking"))
@@ -880,6 +881,7 @@ class HrpsysConfigurator(object):
             self.connectLoggerPort(self.abc, 'controlSwingSupportTime')
             self.connectLoggerPort(self.abc, 'cogOut')
             self.connectLoggerPort(self.abc, 'refZmp')
+            self.connectLoggerPort(self.abc, 'footAccRef')
         if self.st != None:
             self.connectLoggerPort(self.st, 'zmp')
             self.connectLoggerPort(self.st, 'actContactStates')

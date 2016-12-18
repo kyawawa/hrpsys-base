@@ -1546,7 +1546,7 @@ void Stabilizer::calcStateForEmergencySignal()
           m_is_falling_counter = 0;
       }
   }
-  // collision of foot Check
+  // foot collision Check
   int is_foot_collided = 0;
   if (is_walking) {
       // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
@@ -1556,10 +1556,10 @@ void Stabilizer::calcStateForEmergencySignal()
           int swing_leg;
           SimpleZMPDistributor::leg_type support_leg;
           if (contact_states[contact_states_index_map["rleg"]]) {
-              swing_leg = contact_states_index_map["rleg"];
+              swing_leg = contact_states_index_map["lleg"];
               support_leg = SimpleZMPDistributor::RLEG;
           } else {
-              swing_leg = contact_states_index_map["lleg"];
+              swing_leg = contact_states_index_map["rleg"];
               support_leg = SimpleZMPDistributor::LLEG;
           }
           if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {

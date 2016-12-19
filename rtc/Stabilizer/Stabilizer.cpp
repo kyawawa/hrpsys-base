@@ -86,7 +86,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_emergencySignalWalkingOut("emergencySignalWalking", m_emergencySignalWalking),
     m_walkingStopSignalOut("walkingStopSignal", m_walkingStopSignal),
     m_pgainRefOut("pgainRef", m_pgainRef),
-    m_dgainRefOut("dgainRef", m_pgainRef),
+    m_dgainRefOut("dgainRef", m_dgainRef),
     // for debug output
     m_originRefZmpOut("originRefZmp", m_originRefZmp),
     m_originRefCogOut("originRefCog", m_originRefCog),
@@ -1871,12 +1871,12 @@ void Stabilizer::limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& e
 
 void Stabilizer::gainControl(const double T)
 {
-    double remain_swing_time = 1.0;
+    double remain_swing_time = m_controlSwingSupportTime.data[0];
     STIKParam next_swing_ikp = stikp[0];
     size_t swing_joint_num = 0;
     bool is_swing_contact = true;
     for (size_t i = 0; i < stikp.size(); i++) {
-        if (m_controlSwingSupportTime.data[i] < remain_swing_time) {
+        if (m_controlSwingSupportTime.data[i] < remain_swing_time) { // 小さいほうが次の遊脚 or 現在の遊脚
             remain_swing_time = m_controlSwingSupportTime.data[i];
             next_swing_ikp = stikp[i];
             swing_joint_num = jpe_v[i]->numJoints();

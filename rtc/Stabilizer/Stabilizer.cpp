@@ -729,6 +729,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       control_mode = MODE_AIR;
       break;
     }
+    copy (contact_states.begin(), contact_states.end(), prev_contact_states.begin());
   }
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
     if (is_legged_robot) {
@@ -1276,7 +1277,6 @@ void Stabilizer::getActualParameters ()
     m_robot->rootLink()->R = current_root_R;
     m_robot->calcForwardKinematics();
   }
-  copy (contact_states.begin(), contact_states.end(), prev_contact_states.begin());
 }
 
 void Stabilizer::getTargetParameters ()
@@ -1551,7 +1551,8 @@ void Stabilizer::calcStateForEmergencySignal()
   if (is_walking) {
       // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
       // else if (isContact(contact_states_index_map["lleg"])) swing_leg = "rleg";
-      if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) {
+      if (!((contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) ||
+            (isContact(0) && isContact(1)))) {
           // int swing_leg = (contact_states[contact_states_index_map["rleg"]]) ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
           int swing_leg;
           SimpleZMPDistributor::leg_type support_leg;
@@ -1562,15 +1563,25 @@ void Stabilizer::calcStateForEmergencySignal()
               swing_leg = contact_states_index_map["rleg"];
               support_leg = SimpleZMPDistributor::LLEG;
           }
-          if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
-              ++is_foot_collided;
-              std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
-              Eigen::Vector2d tmp_cp;
-              for (size_t i = 0; i < 2; i++) {
-                  tmp_cp(i) = act_cp(i);
+          static double swing_time = m_controlSwingSupportTime.data[swing_leg];
+          if (contact_states != prev_contact_states) {
+              swing_time = m_controlSwingSupportTime.data[swing_leg];
+          }
+          double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
+          double swing_collision_offset_before = 0.01; // [s]
+          double swing_collision_offset_after = 0.01; // [s]
+          if ((swing_time - remain_swing_time) > swing_collision_offset_before && remain_swing_time > swing_collision_offset_after) { // ignore the beginning and the end
+              // if (abs_sensor_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
+              if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
+                  ++is_foot_collided;
+                  std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
+                  Eigen::Vector2d tmp_cp;
+                  for (size_t i = 0; i < 2; i++) {
+                      tmp_cp(i) = act_cp(i);
+                  }
+                  is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
+                  if (is_cp_outside) ++is_foot_collided;
               }
-              is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
-              if (is_cp_outside) ++is_foot_collided;
           }
       }
   }

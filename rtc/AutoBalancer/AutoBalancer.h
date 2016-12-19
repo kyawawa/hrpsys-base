@@ -210,10 +210,11 @@ class AutoBalancer
   struct ABCIKparam {
     hrp::Vector3 target_p0, localPos, adjust_interpolation_target_p0, adjust_interpolation_org_p0;
     hrp::Matrix33 target_r0, localR, adjust_interpolation_target_r0, adjust_interpolation_org_r0;
+    std::string parent_name; // Name of parent ling in the limb
     rats::coordinates target_end_coords;
     hrp::Link* target_link;
     hrp::JointPathExPtr manip;
-    double avoid_gain, reference_gain;
+    double avoid_gain, reference_gain, max_limb_length, limb_length_margin;
     size_t pos_ik_error_count, rot_ik_error_count;
     bool is_active, has_toe_joint;
   };
@@ -226,6 +227,9 @@ class AutoBalancer
   void waitABCTransition();
   hrp::Matrix33 OrientRotationMatrix (const hrp::Matrix33& rot, const hrp::Vector3& axis1, const hrp::Vector3& axis2);
   void fixLegToCoords (const hrp::Vector3& fix_pos, const hrp::Matrix33& fix_rot);
+  void limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& target_p, const std::vector<std::string>& target_name);
+  double calcDampingControl (const double prev_d, const double TT);
+  double vlimit(double value, double llimit_value, double ulimit_value);
   void startWalking ();
   void stopWalking ();
   void copyRatscoords2Footstep(OpenHRP::AutoBalancerService::Footstep& out_fs, const rats::coordinates& in_fs);
@@ -260,6 +264,7 @@ class AutoBalancer
   double m_dt, move_base_gain;
   hrp::BodyPtr m_robot;
   coil::Mutex m_mutex;
+  double d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];
 
   double transition_interpolator_ratio, transition_time, zmp_transition_time, adjust_footstep_transition_time, leg_names_interpolator_ratio;
   interpolator *zmp_offset_interpolator;
@@ -283,6 +288,7 @@ class AutoBalancer
   rats::coordinates graspless_manip_reference_trans_coords;
   double pos_ik_thre, rot_ik_thre;
   std::vector<bool> act_contact_states;
+  bool use_limb_stretch_avoidance;
 };
 
 

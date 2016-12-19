@@ -197,6 +197,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         coil::stringTo(ee_target, end_effectors_str[i*prop_num+1].c_str());
         coil::stringTo(ee_base, end_effectors_str[i*prop_num+2].c_str());
         ABCIKparam tp;
+        hrp::Link* root = m_robot->link(ee_target);
         for (size_t j = 0; j < 3; j++) {
           coil::stringTo(tp.localPos(j), end_effectors_str[i*prop_num+3+j].c_str());
         }
@@ -221,6 +222,13 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         tp.avoid_gain = 0.001;
         tp.reference_gain = 0.01;
         tp.pos_ik_error_count = tp.rot_ik_error_count = 0;
+        tp.max_limb_length = 0.0;
+        while (!root->isRoot()) {
+          tp.max_limb_length += root->b.norm();
+          tp.parent_name = root->name;
+          root = root->parent;
+        }
+        tp.limb_length_margin = 0.1;
         ikp.insert(std::pair<std::string, ABCIKparam>(ee_name , tp));
         ikp[ee_name].target_link = m_robot->link(ee_target);
         ee_vec.push_back(ee_name);
@@ -377,6 +385,11 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     pos_ik_thre = 0.5*1e-3; // [m]
     rot_ik_thre = (1e-2)*M_PI/180.0; // [rad]
     ik_error_debug_print_freq = static_cast<int>(0.2/m_dt); // once per 0.2 [s]
+
+    use_limb_stretch_avoidance = false;
+    limb_stretch_avoidance_time_const = 1.5;
+    limb_stretch_avoidance_vlimit[0] = -1000 * 1e-3 * m_dt; // lower limit
+    limb_stretch_avoidance_vlimit[1] = 50 * 1e-3 * m_dt; // upper limit
 
     hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
     if (sen == NULL) {
@@ -541,6 +554,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
       } else {
         rel_ref_zmp = input_zmp;
+        d_pos_z_root = 0.0;
       }
       // transition
       if (!is_transition_interpolator_empty) {
@@ -1096,12 +1110,65 @@ void AutoBalancer::solveLimbIK ()
           }
       }
   }
+  // Avoid limb stretch
+  {
+    std::vector<hrp::Vector3> tmp_p;
+    std::vector<std::string> tmp_name;
+    for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+      if (it->first.find("leg") != std::string::npos) {
+        tmp_p.push_back(it->second.target_p0);
+        tmp_name.push_back(it->first);
+      }
+    }
+    limbStretchAvoidanceControl(tmp_p, tmp_name);
+  }
   m_robot->calcForwardKinematics();
 
   for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
     if (it->second.is_active) solveLimbIKforLimb(it->second, it->first);
   }
   if (gg_is_walking && !gg_solved) stopWalking ();
+}
+
+void AutoBalancer::limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& target_p, const std::vector<std::string>& target_name)
+{
+  m_robot->calcForwardKinematics();
+  double tmp_d_pos_z_root = 0.0, prev_d_pos_z_root = d_pos_z_root;
+  if (use_limb_stretch_avoidance) {
+    for (size_t i = 0; i < target_p.size(); i++) {
+      // Check whether inside limb length limitation
+      hrp::Link* parent_link = m_robot->link(ikp[target_name[i]].parent_name);
+      hrp::Vector3 rel_target_p = target_p[i] - parent_link->p; // position from parent to target link (world frame)
+      double limb_length_limitation = ikp[target_name[i]].max_limb_length - ikp[target_name[i]].limb_length_margin;
+      double tmp = limb_length_limitation * limb_length_limitation - rel_target_p(0) * rel_target_p(0) - rel_target_p(1) * rel_target_p(1);
+      if (rel_target_p.norm() > limb_length_limitation && tmp >= 0) {
+        tmp_d_pos_z_root = std::min(tmp_d_pos_z_root, rel_target_p(2) + std::sqrt(tmp));
+      }
+    }
+    // Change root link height depending on limb length
+    d_pos_z_root = tmp_d_pos_z_root == 0.0 ? calcDampingControl(d_pos_z_root, limb_stretch_avoidance_time_const) : tmp_d_pos_z_root;
+    d_pos_z_root = tmp_d_pos_z_root;
+  } else {
+    d_pos_z_root = calcDampingControl(d_pos_z_root, limb_stretch_avoidance_time_const);
+  }
+  d_pos_z_root = vlimit(d_pos_z_root, prev_d_pos_z_root + limb_stretch_avoidance_vlimit[0], prev_d_pos_z_root + limb_stretch_avoidance_vlimit[1]);
+  m_robot->rootLink()->p(2) += d_pos_z_root;
+}
+
+// Retrieving only
+double AutoBalancer::calcDampingControl (const double prev_d, const double TT)
+{
+  return - 1/TT * prev_d * m_dt + prev_d;
+};
+
+double AutoBalancer::vlimit(double value, double llimit_value, double ulimit_value)
+{
+  if (value > ulimit_value) {
+    return ulimit_value;
+  } else if (value < llimit_value) {
+    return llimit_value;
+  }
+  return value;
 }
 
 /*
@@ -1747,6 +1814,14 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
       std::cerr << "[" << m_profile.instance_name << "]   localpos = " << it->second.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
       std::cerr << "[" << m_profile.instance_name << "]   localR = " << it->second.localR.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "    [", "]")) << std::endl;
   }
+  use_limb_stretch_avoidance = i_param.use_limb_stretch_avoidance;
+  limb_stretch_avoidance_time_const = i_param.limb_stretch_avoidance_time_const;
+  for (size_t i = 0; i < 2; i++) {
+    limb_stretch_avoidance_vlimit[i] = i_param.limb_stretch_avoidance_vlimit[i];
+  }
+  for (size_t i = 0; i < ikp.size(); i++) {
+    ikp[ee_vec[i]].limb_length_margin = i_param.limb_length_margin[i];
+  }
 
   std::cerr << "[" << m_profile.instance_name << "]   move_base_gain = " << move_base_gain << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   default_zmp_offsets = ";
@@ -1915,6 +1990,15 @@ bool AutoBalancer::getAutoBalancerParam(OpenHRP::AutoBalancerService::AutoBalanc
       ilp.avoid_gain = param.avoid_gain;
       ilp.reference_gain = param.reference_gain;
       ilp.manipulability_limit = param.manip->getManipulabilityLimit();
+  }
+  i_param.use_limb_stretch_avoidance = use_limb_stretch_avoidance;
+  i_param.limb_stretch_avoidance_time_const = limb_stretch_avoidance_time_const;
+  i_param.limb_length_margin.length(ikp.size());
+  for (size_t i = 0; i < 2; i++) {
+    i_param.limb_stretch_avoidance_vlimit[i] = limb_stretch_avoidance_vlimit[i];
+  }
+  for (size_t i = 0; i < ikp.size(); i++) {
+    i_param.limb_length_margin[i] = ikp[ee_vec[i]].limb_length_margin;
   }
   return true;
 };

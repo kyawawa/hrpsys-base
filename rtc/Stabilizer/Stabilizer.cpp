@@ -1585,6 +1585,19 @@ void Stabilizer::calcStateForEmergencySignal()
                   if (is_cp_outside) ++is_foot_collided;
               }
           }
+          double early_land_offset_before = 0.1; // [s]
+          double early_land_offset_after = 0.1; // [s]
+          // ignore the beginning and the end of swinging phase
+          // detect early landing by 50[N]
+          if (abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
+              if (is_foot_collided) {
+                  int max_idx;
+                  abs_sensor_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
+                  if (max_idx == 2) is_foot_collided = 3;
+              } else {
+                  is_foot_collided = 3;
+              }
+          }
       }
   }
   // Total check for emergency signal

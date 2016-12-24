@@ -1167,7 +1167,7 @@ namespace rats
 #endif
 
     enum velocity_mode_flag { VEL_IDLING, VEL_DOING, VEL_ENDING };
-    enum emergency_flag { IDLING, EMERGENCY_STOP, STOPPING };
+    enum emergency_flag { IDLING, EMERGENCY_STOP, STOPPING, EARLY_LANDING };
 
     /* member variables for gait_generator */
     // Footstep list to be executed
@@ -1340,9 +1340,13 @@ namespace rats
     void emergency_stop (int walking_emergency_flg = 1)
     {
       if (!footstep_nodes_list.empty()) {
-        velocity_mode_flg = VEL_IDLING;
-        emergency_flg = EMERGENCY_STOP;
-        if (walking_emergency_flg > 1) is_cp_outside = true;
+          if (walking_emergency_flg == 3) {
+              emergency_flg = EARLY_LANDING;
+          } else {
+              velocity_mode_flg = VEL_IDLING;
+              emergency_flg = EMERGENCY_STOP;
+              if (walking_emergency_flg > 1) is_cp_outside = true;
+          }
       }
     };
     void reset_emergency_stop ()

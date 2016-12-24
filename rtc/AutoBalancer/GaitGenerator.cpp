@@ -228,7 +228,9 @@ namespace rats
       // -> 既に対応してそう
       // -> どうやってpointsに入れるか
       if (get_foot_emergency()) {
-          path_midcoords(ret, tmp_start, tmp_goal, 0, swing_trajectory_generator_idx, default_orbit_type);
+          double tmp_height = tmp_start.pos[2] < tmp_goal.pos[2] ? step_height : 0;
+          path_midcoords(ret, tmp_start, tmp_goal, tmp_height, swing_trajectory_generator_idx, default_orbit_type);
+          set_foot_emergency(false);
       } else {
           path_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx, default_orbit_type);
       }
@@ -486,9 +488,6 @@ namespace rats
       if (footstep_index < fnsl.size() - 1) {
         footstep_index++;
       }
-      if (get_foot_emergency()) {
-        set_foot_emergency(false);
-      }
       if (footstep_index < fnsl.size() - 1) {
         current_step_height = fnsl[footstep_index].front().step_height;
         current_toe_angle = fnsl[footstep_index].front().toe_angle;
@@ -593,13 +592,13 @@ namespace rats
     if (emergency_flg == EMERGENCY_STOP && lcg.get_footstep_index() > 0) {
         leg_type cur_leg = footstep_nodes_list[lcg.get_footstep_index()].front().l_r;
         leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
-        coordinates tmp_coords = footstep_nodes_list[get_overwritable_index()].front().worldcoords;
 
         if (overwritable_footstep_index_offset > 0) {
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, lcg.get_default_step_height() + 0.2, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
+            coordinates tmp_coords = footstep_nodes_list[get_overwritable_index()].front().worldcoords;
             double first_step_time;
             if (false) {
                 hrp::Vector3 act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
@@ -613,19 +612,24 @@ namespace rats
                 first_step_time = default_step_time;
             }
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
             // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             set_foot_emergency(true);
             coordinates tmp_start = get_swing_leg_steps()[0].worldcoords;
             coordinates tmp_goal = overwrite_footstep_nodes_list[0].front().worldcoords;
             lcg.set_tmp_start(tmp_start);
             lcg.set_tmp_goal(tmp_goal);
+            std::vector<step_node> tmp_swing_leg_src_steps;
+            std::copy(lcg.get_swing_leg_src_steps().begin(),
+                      lcg.get_swing_leg_src_steps().end(),
+                      std::back_inserter(tmp_swing_leg_src_steps));
+            tmp_swing_leg_src_steps.front().worldcoords = tmp_start;
             // set_default_double_support_ratio_before(0);
 
             size_t one_step_len = overwrite_footstep_nodes_list.front().front().step_time / dt;
 
             // lcg.reset(static_cast<size_t>(default_double_support_ratio_before * one_step_len), static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), footstep_nodes_list[lcg.get_footstep_index()], footstep_nodes_list[lcg.get_footstep_index() - 1], default_double_support_ratio_before, default_double_support_ratio_after);
-            lcg.reset(one_step_len, static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), footstep_nodes_list[lcg.get_footstep_index()], footstep_nodes_list[lcg.get_footstep_index() - 1], default_double_support_ratio_before, default_double_support_ratio_after);
+            lcg.reset(one_step_len, static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), tmp_swing_leg_src_steps, get_support_leg_steps(), default_double_support_ratio_before, default_double_support_ratio_after);
             // lcg.set_lcg_count(static_cast<size_t>(one_step_len * (1 - default_double_support_ratio_before)));
         }
 

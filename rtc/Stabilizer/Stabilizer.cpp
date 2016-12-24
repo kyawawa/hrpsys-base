@@ -1551,6 +1551,7 @@ void Stabilizer::calcStateForEmergencySignal()
   if (is_walking) {
       // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
       // else if (isContact(contact_states_index_map["lleg"])) swing_leg = "rleg";
+      // Reference or Actual swinging phase
       if (!((contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) ||
             (isContact(0) && isContact(1)))) {
           // int swing_leg = (contact_states[contact_states_index_map["rleg"]]) ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
@@ -1568,11 +1569,12 @@ void Stabilizer::calcStateForEmergencySignal()
               swing_time = m_controlSwingSupportTime.data[swing_leg];
           }
           double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
-          double swing_collision_offset_before = 0.01; // [s]
-          double swing_collision_offset_after = 0.01; // [s]
-          if ((swing_time - remain_swing_time) > swing_collision_offset_before && remain_swing_time > swing_collision_offset_after) { // ignore the beginning and the end
+          double swing_collision_offset_before = 0.1; // [s]
+          double swing_collision_offset_after = 0.1; // [s]
+          if ((swing_time - remain_swing_time) > swing_collision_offset_before && remain_swing_time > swing_collision_offset_after) { // ignore the beginning and the end of swinging phase
               // if (abs_sensor_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
-              if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
+              // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
+              if (std::fabs(abs_sensor_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
                   ++is_foot_collided;
                   std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
                   Eigen::Vector2d tmp_cp;

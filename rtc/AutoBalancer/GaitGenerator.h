@@ -1004,22 +1004,20 @@ namespace rats
         //     crdtg.reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
         //     break;
         default:
-            {
-                hrp::Vector3 tmp_pos = hrp::Vector3::Zero();
-                if (!dhtg.empty()) tmp_pos = dhtg.front().get_pos();
-                dhtg.clear();
-                for (size_t i = 0; i < swing_leg_dst_steps.size(); i++) {
-                    // dhtg.push_back(boost::shared_ptr<delay_hoffarbib_trajectory_generator>(new delay_hoffarbib_trajectory_generator()));
-                    dhtg.push_back(delay_hoffarbib_trajectory_generator());
-                    if (get_foot_emergency() && i == 0) {
-                        dhtg.back().reset_all(dt, one_step_count, 0, default_double_support_ratio_after,
-                                               time_offset, final_distance_weight, time_offset_xy2z);
-                        dhtg.back().set_pos(tmp_pos);
-                    }
-                    else dhtg.back().reset_all(dt, one_step_count,
-                                                default_double_support_ratio_before, default_double_support_ratio_after,
-                                                time_offset, final_distance_weight, time_offset_xy2z);
+            hrp::Vector3 tmp_pos = hrp::Vector3::Zero();
+            if (!dhtg.empty()) tmp_pos = dhtg.front().get_pos();
+            dhtg.clear();
+            for (size_t i = 0; i < swing_leg_dst_steps.size(); i++) {
+                dhtg.push_back(delay_hoffarbib_trajectory_generator());
+                if (get_foot_emergency() && i == 0) {
+                    dhtg.back().reset_all(dt, one_step_count, 0, default_double_support_ratio_after,
+                                          time_offset, final_distance_weight, time_offset_xy2z);
+                    dhtg.back().set_pos(tmp_pos);
+                    current_step_height = default_step_height;
                 }
+                else dhtg.back().reset_all(dt, one_step_count,
+                                           default_double_support_ratio_before, default_double_support_ratio_after,
+                                           time_offset, final_distance_weight, time_offset_xy2z);
             }
             break;
         }

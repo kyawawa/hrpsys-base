@@ -156,7 +156,7 @@ void JointPathEx::getInterlockingJointPairIndices (std::vector<std::pair<size_t,
 
 bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatrix &Jnull) {
     const int n = numJoints();
-                
+
     hrp::dmatrix w = hrp::dmatrix::Identity(n,n);
     //
     // wmat/weight: weighting joint angle weight
@@ -194,13 +194,13 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
         // If use_inside_joint_weight_retrieval = true (true by default), use T. F. Chang and R.-V. Dubeby weight retrieval inward.
         // Otherwise, joint weight is always calculated from limit value to resolve https://github.com/fkanehiro/hrpsys-base/issues/516.
         if (( r - avoid_weight_gain[j] ) >= 0 ) {
-	  w(j, j) = optional_weight_vector[j] * ( 1.0 / ( 1.0 + r) );
-	} else {
+            w(j, j) = optional_weight_vector[j] * ( 1.0 / ( 1.0 + r) );
+        } else {
             if (use_inside_joint_weight_retrieval)
                 w(j, j) = optional_weight_vector[j] * 1.0;
             else
                 w(j, j) = optional_weight_vector[j] * ( 1.0 / ( 1.0 + r) );
-	}
+        }
         avoid_weight_gain[j] = r;
     }
     if ( DEBUG ) {
@@ -218,10 +218,10 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
     double manipulability = sqrt((J*J.transpose()).determinant());
     double k = 0;
     if ( manipulability < manipulability_limit ) {
-	k = manipulability_gain * pow((1 - ( manipulability / manipulability_limit )), 2);
+        k = manipulability_gain * pow((1 - ( manipulability / manipulability_limit )), 2);
     }
     if ( DEBUG ) {
-	std::cerr << " manipulability = " <<  manipulability << " < " << manipulability_limit << ", k = " << k << " -> " << sr_gain * k << std::endl;
+        std::cerr << " manipulability = " <<  manipulability << " < " << manipulability_limit << ", k = " << k << " -> " << sr_gain * k << std::endl;
     }
 
     calcSRInverse(J, Jinv, sr_gain * k, w);
@@ -231,8 +231,10 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
     return true;
 }
 
-bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& omega,
-                                             const double LAMBDA, const double avoid_gain, const double reference_gain, const hrp::dvector* reference_q) {
+bool JointPathEx::calcInverseKinematics2Loop(const Vector3& _dp, const Vector3& _omega,
+                                             const double LAMBDA, const double avoid_gain, const double reference_gain, const hrp::dvector* reference_q,
+                                             const std::bitset<6> workspace, const double following_gain)
+{
     const int n = numJoints();
 
     if ( DEBUG ) {
@@ -243,7 +245,32 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         std::cerr << endl;
     }
 
-    size_t ee_workspace_dim = 6; // End-effector workspace dimensions including pos(3) and rot(3)
+    hrp::dvector dp, omega;
+    // initialize dp and omega
+    {
+        std::bitset<6> tmp = workspace << 3;
+        if (tmp.count() != 3) {
+            dp.resize(tmp.count());
+            for (size_t i = 0, j = 0; i < 3; ++i) {
+                if (workspace[i]) dp(j++) = _dp(i);
+            }
+        } else {
+            dp = _dp;
+        }
+        tmp = workspace >> 3;
+        if (tmp.count() != 3) {
+            omega.resize(tmp.count());
+            for (size_t i = 3, j = 0; i < 6; ++i) {
+                if (workspace[i]) omega(j++) = _omega(i);
+            }
+        } else {
+            omega = _omega;
+        }
+    }
+    // std::cerr << "    dp: " << dp.transpose() << std::endl;
+    // std::cerr << "   _dp: " << _dp.transpose() << std::endl;
+
+    size_t ee_workspace_dim = workspace.count(); // End-effector workspace dimensions including pos(3) and rot(3)
     size_t ij_workspace_dim = interlocking_joint_pair_indices.size(); // Dimensions for interlocking joints constraint. 0 by default.
     size_t workspace_dim = ee_workspace_dim + ij_workspace_dim;
 
@@ -253,11 +280,11 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
     hrp::dmatrix Jinv(n, workspace_dim);
     hrp::dmatrix Jnull(n, n);
     hrp::dvector dq(n);
+    hrp::dmatrix ee_J;
+    calcJacobian(ee_J);
 
     if (ij_workspace_dim > 0) {
         v << dp, omega, dvector::Zero(ij_workspace_dim);
-        hrp::dmatrix ee_J = dmatrix::Zero(ee_workspace_dim, n);
-        calcJacobian(ee_J);
         hrp::dmatrix ij_J = dmatrix::Zero(ij_workspace_dim, n);
         for (size_t i = 0; i < ij_workspace_dim; i++) {
             std::pair<size_t, size_t>& pair = interlocking_joint_pair_indices[i];
@@ -267,7 +294,14 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         J << ee_J, ij_J;
     } else {
         v << dp, omega;
-        calcJacobian(J);
+        hrp::dmatrix Jtmp;
+        if (workspace.count() != workspace.size()) {
+            for (size_t i = 0, j = 0; i < workspace.size(); ++i) {
+                if (workspace[i]) J.row(j++) = ee_J.row(i);
+            }
+        } else {
+            J = ee_J;
+        }
     }
     calcJacobianInverseNullspace(J, Jinv, Jnull);
     dq = Jinv * v; // dq = pseudoInverse(J) * v
@@ -280,6 +314,33 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         std::cerr << std::endl;
         std::cerr << "    J :" << std::endl << J;
         std::cerr << " Jinv :" << std::endl << Jinv;
+    }
+    // If workspace is not full, add fllowing to reference by null space vector
+    if ( workspace.count() != workspace.size() ) {
+      hrp::dvector u(n);
+      hrp::dvector ee_v(workspace.size());
+      ee_v << _dp, _omega;
+      // std::cerr << "   v: " << v.transpose() << std::endl;
+      // std::cerr << "ee_v: " << ee_v.transpose() << std::endl;
+      // for (size_t i = 0; i < workspace.size(); ++i) {
+      //     if (workspace[i]) ee_v(i) = 0;
+      // }
+      solveLinearEquation(ee_J, ee_v, u);
+      u *= following_gain;
+      if ( DEBUG ) {
+        std::cerr << "u(ref):";
+        for(int j=0; j < n; ++j){
+          std::cerr << std::setw(8) << std::setiosflags(std::ios::fixed) << std::setprecision(4) << rad2deg(u(j));
+        }
+        std::cerr << std::endl;
+        std::cerr << "  JN*u:";
+        hrp::dvector nullu = Jnull * u;
+        for(int j=0; j < n; ++j){
+          std::cerr << std::setw(8) << std::setiosflags(std::ios::fixed) << std::setprecision(4) << rad2deg(nullu(j));
+        }
+        std::cerr << std::endl;
+      }
+      dq = dq + Jnull * u;
     }
     // If avoid_gain is set, add joint limit avoidance by null space vector
     if ( avoid_gain > 0.0 ) {
@@ -353,7 +414,7 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         }
         min_speed_ratio = std::max(std::min(min_speed_ratio, speed_ratio), 0.0);
     }
-    if ( min_speed_ratio < 1.0 ) { 
+    if ( min_speed_ratio < 1.0 ) {
       if ( DEBUG ) {
         std::cerr << "spdlmt: ";
         for(int j=0; j < n; ++j) { std::cerr << dq(j) << " "; } std::cerr << std::endl;
@@ -431,7 +492,7 @@ hrp::Vector3 matrix_logEx(const hrp::Matrix33& m) {
     double q0, th;
     hrp::Vector3 q;
     double norm;
-  
+
     Eigen::Quaternion<double> eiq(m);
     q0 = eiq.w();
     q = eiq.vec();
@@ -454,7 +515,8 @@ hrp::Vector3 matrix_logEx(const hrp::Matrix33& m) {
 bool JointPathEx::calcInverseKinematics2Loop(const Vector3& end_effector_p, const Matrix33& end_effector_R,
                                              const double LAMBDA, const double avoid_gain, const double reference_gain, const hrp::dvector* reference_q,
                                              const double vel_gain,
-                                             const hrp::Vector3& localPos, const hrp::Matrix33& localR)
+                                             const hrp::Vector3& localPos, const hrp::Matrix33& localR,
+                                             const std::bitset<6> workspace, const double following_gain)
 {
     hrp::Matrix33 target_link_R(end_effector_R * localR.transpose());
     hrp::Vector3 target_link_p(end_effector_p - target_link_R * localPos);
@@ -464,7 +526,7 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& end_effector_p, cons
     hrp::Vector3 vel_r(endLink()->R * matrix_logEx(endLink()->R.transpose() * target_link_R));
     vel_p *= vel_gain;
     vel_r *= vel_gain;
-    return calcInverseKinematics2Loop(vel_p, vel_r, LAMBDA, avoid_gain, reference_gain, reference_q);
+    return calcInverseKinematics2Loop(vel_p, vel_r, LAMBDA, avoid_gain, reference_gain, reference_q, workspace, following_gain);
 }
 
 bool JointPathEx::calcInverseKinematics2(const Vector3& end_p, const Matrix33& end_R,
@@ -488,7 +550,7 @@ bool JointPathEx::calcInverseKinematics2(const Vector3& end_p, const Matrix33& e
             return false;
         }
     }
-    
+
     const int n = numJoints();
     dvector qorg(n);
 
@@ -499,18 +561,18 @@ bool JointPathEx::calcInverseKinematics2(const Vector3& end_p, const Matrix33& e
         avoid_weight_gain[i] = 100000000000000000000.0;
     }
 
-    
+
     double errsqr = DBL_MAX;//maxIKErrorSqr * 100.0;
     double errsqr0 = errsqr;
     bool converged = false;
 
     int iter = 0;
     for(iter = 0; iter < MAX_IK_ITERATION; iter++){
-        
+
       if ( DEBUG ) {
         std::cerr << " iter : " << iter << " / " << MAX_IK_ITERATION << ", n = " << n << std::endl;
       }
-        
+
       Vector3 dp(end_p - target->p);
       Vector3 omega(target->R * omegaFromRotEx(target->R.transpose() * end_R));
       if ( dp.norm() > 0.1 ) dp = dp*0.1/dp.norm();
@@ -561,7 +623,7 @@ bool JointPathEx::calcInverseKinematics2(const Vector3& end_p, const Matrix33& e
       }
       calcForwardKinematics();
     }
-    
+
     return converged;
 }
 

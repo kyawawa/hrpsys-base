@@ -1098,8 +1098,39 @@ void AutoBalancer::solveLimbIK ()
   }
   m_robot->calcForwardKinematics();
 
-  for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-    if (it->second.is_active) solveLimbIKforLimb(it->second, it->first);
+  if (true) {
+      std::bitset<6> workspace(073); // 111011
+      double d_root_z = 0.0;
+      std::map<std::string, ABCIKparam>::iterator it_solved;
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+          if (it->second.is_active) {
+              it->second.manip->calcInverseKinematics2Loop(it->second.target_p0, it->second.target_r0, 1.0, 0.1, //it->second.avoid_gain,
+                                                           it->second.reference_gain, &qrefv, transition_interpolator_ratio * leg_names_interpolator_ratio,
+                                                           hrp::Vector3::Zero(), hrp::Matrix33::Identity(), workspace, 1.0);
+              double tmp_d_root_z = it->second.target_link->p(2) - it->second.target_p0(2);
+              if (tmp_d_root_z < d_root_z) {
+                  d_root_z = tmp_d_root_z;
+                  it_solved = it;
+              }
+          }
+      }
+      std::cerr << "d_root_z: " << d_root_z << std::endl;
+      m_robot->rootLink()->p(2) += d_root_z;
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+          for ( unsigned int j = 0; j < it->second.manip->numJoints(); j++ ){
+              int i = it->second.manip->joint(j)->jointId;
+              m_robot->joint(i)->q = qorg[i];
+          }
+      }
+      m_robot->calcForwardKinematics();
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+          // if (it->second.is_active && it != it_solved) solveLimbIKforLimb(it->second, it->first);
+          if (it->second.is_active) solveLimbIKforLimb(it->second, it->first);
+      }
+  } else {
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+          if (it->second.is_active) solveLimbIKforLimb(it->second, it->first);
+      }
   }
   if (gg_is_walking && !gg_solved) stopWalking ();
 }

@@ -608,8 +608,10 @@ namespace rats
                 first_step_time = default_step_time;
             } else {
                 int rl = cur_leg == RLEG ? -1 : 1;
-                tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
-                tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
+                // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
+                // tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
+                tmp_coords.pos[2] += 0.1;
+                set_default_orbit_type(STAIR);
                 first_step_time = default_step_time;
             }
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));

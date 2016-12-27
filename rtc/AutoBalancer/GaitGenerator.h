@@ -596,13 +596,13 @@ namespace rats
         path.push_back(start);
         // currently way_point_offset(1) is not used.
         //if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > _way_point_offset(2) ) {
-        if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > 0.02) {
+        if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > 0.0) {
           path.push_back(hrp::Vector3(start+-1*_way_point_offset(0)*diff_vec.normalized()+hrp::Vector3(0,0,_way_point_offset(2)+max_height-start(2))));
         }
         path.push_back(hrp::Vector3(start(0), start(1), max_height));
         path.push_back(hrp::Vector3(goal(0), goal(1), max_height));
         //if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > _way_point_offset(2) ) {
-        if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > 0.02) {
+        if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > 0.0) {
           path.push_back(hrp::Vector3(goal+_way_point_offset(0)*diff_vec.normalized()+hrp::Vector3(0,0,_way_point_offset(2)+max_height-goal(2))));
         }
         // if (height > 20 * 1e-3) {

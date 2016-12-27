@@ -1567,8 +1567,10 @@ void Stabilizer::calcStateForEmergencySignal()
               support_leg = SimpleZMPDistributor::LLEG;
           }
           static double swing_time = m_controlSwingSupportTime.data[swing_leg];
+          static bool early_land = true;
           if (contact_states != prev_contact_states) {
               swing_time = m_controlSwingSupportTime.data[swing_leg];
+              early_land = true;
           }
           double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
           double swing_collision_offset_before = 0.1; // [s]
@@ -1591,13 +1593,19 @@ void Stabilizer::calcStateForEmergencySignal()
           double early_land_offset_after = 0.1; // [s]
           // ignore the beginning and the end of swinging phase
           // detect early landing by 50[N]
-          if (abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
+          // if (prev_act_force_z[swing_leg] > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
+          // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
+          if (early_land && abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
               if (is_foot_collided) {
                   int max_idx;
                   abs_sensor_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
-                  if (max_idx == 2) is_foot_collided = 3;
+                  if (max_idx == 2) {
+                      is_foot_collided = 3;
+                      early_land = false;
+                  }
               } else {
                   is_foot_collided = 3;
+                  early_land = false;
               }
           }
       }

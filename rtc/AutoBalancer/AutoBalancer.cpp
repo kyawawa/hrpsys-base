@@ -761,7 +761,8 @@ void AutoBalancer::getTargetParameters()
               ikp[leg_type_map[it->l_r]].target_r0 = sw_coords.rot;
           }
       }
-      gg->get_swing_support_mid_coords(tmp_fix_coords);
+      // gg->get_swing_support_mid_coords(tmp_fix_coords);
+      gg->get_mid_coords_to_dst(tmp_fix_coords);
       // set contactStates
       {
           std::vector<std::string> tmp_current_support_states_names;
@@ -858,6 +859,7 @@ void AutoBalancer::getTargetParameters()
         rats::mid_coords(fix_leg_coords, 0.5, tmprc, tmplc);
         tmp_fix_coords = fix_leg_coords;
     }
+    gg->set_prev_mid_coords_to_dst(tmp_fix_coords);
     // Tempolarily modify tmp_fix_coords
     // This will be removed after seq outputs adequate waistRPY discussed in https://github.com/fkanehiro/hrpsys-base/issues/272
     {

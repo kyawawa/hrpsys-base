@@ -365,6 +365,8 @@ class Stabilizer
   hrp::dvector servo_pgain_percentage, servo_dgain_percentage;
   double gain_control_time_const;
   hrp::Vector3 foot_acc_ref;
+  std::vector<double> swing_collision_offset;
+  std::vector<double> early_land_offset;
 };
 
 

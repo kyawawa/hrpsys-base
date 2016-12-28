@@ -243,6 +243,9 @@ module OpenHRP
       sequence<sequence<double> > swing_servo_pgain_percentage;
       sequence<sequence<double> > swing_servo_dgain_percentage;
       double gain_control_time_const;
+      // Non detection area before and after [s]
+      DblArray2 swing_collision_offset;
+      DblArray2 early_land_offset;
     };
 
     /**

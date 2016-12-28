@@ -450,6 +450,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
   gain_control_time_const = 0.4;
   foot_acc_ref = hrp::Vector3::Zero();
+  swing_collision_offset.resize(2, 0.1);
+  early_land_offset.resize(2, 0.1);
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -1573,9 +1575,7 @@ void Stabilizer::calcStateForEmergencySignal()
               early_land = true;
           }
           double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
-          double swing_collision_offset_before = 0.1; // [s]
-          double swing_collision_offset_after = 0.1; // [s]
-          if ((swing_time - remain_swing_time) > swing_collision_offset_before && remain_swing_time > swing_collision_offset_after) { // ignore the beginning and the end of swinging phase
+          if ((swing_time - remain_swing_time) > swing_collision_offset[0] && remain_swing_time > swing_collision_offset[1]) { // ignore the beginning and the end of swinging phase
               // if (abs_sensor_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
               // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
               if (std::fabs(abs_sensor_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
@@ -1589,13 +1589,11 @@ void Stabilizer::calcStateForEmergencySignal()
                   if (is_cp_outside) ++is_foot_collided;
               }
           }
-          double early_land_offset_before = 0.1; // [s]
-          double early_land_offset_after = 0.1; // [s]
           // ignore the beginning and the end of swinging phase
           // detect early landing by 50[N]
-          // if (prev_act_force_z[swing_leg] > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
-          // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
-          if (early_land && abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset_before && remain_swing_time > early_land_offset_after) {
+          // if (prev_act_force_z[swing_leg] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+          // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+          if (early_land && abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
               if (is_foot_collided) {
                   int max_idx;
                   abs_sensor_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
@@ -2091,6 +2089,8 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.ref_capture_point[i] = ref_cp(i);
     i_stp.act_capture_point[i] = act_cp(i);
     i_stp.cp_offset[i] = cp_offset(i);
+    i_stp.swing_collision_offset[i] = swing_collision_offset[i];
+    i_stp.early_land_offset[i] = early_land_offset[i];
   }
   i_stp.eefm_pos_time_const_support.length(stikp.size());
   i_stp.eefm_pos_damping_gain.length(stikp.size());
@@ -2305,6 +2305,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     ref_cp(i) = i_stp.ref_capture_point[i];
     act_cp(i) = i_stp.act_capture_point[i];
     cp_offset(i) = i_stp.cp_offset[i];
+    swing_collision_offset[i] = i_stp.swing_collision_offset[i];
+    early_land_offset[i] = i_stp.early_land_offset[i];
   }
   bool is_damping_parameter_ok = true;
   if ( i_stp.eefm_pos_damping_gain.length () == stikp.size() &&

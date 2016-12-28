@@ -599,7 +599,7 @@ namespace rats
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, footstep_nodes_list[get_overwritable_index() - 1].front().worldcoords, 0, default_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, 0, default_step_time, 0, 0)));
         } else {
-            coordinates tmp_coords = footstep_nodes_list[get_overwritable_index()].front().worldcoords;
+            coordinates tmp_coords = footstep_nodes_list[get_overwritable_index()].front().worldcoords; // dst
             double first_step_time;
             if (false) {
                 hrp::Vector3 act_cp = act_cog + act_cogvel / std::sqrt(gravitational_acceleration / (act_cog(2) - refzmp(2)));
@@ -610,7 +610,7 @@ namespace rats
                 int rl = cur_leg == RLEG ? -1 : 1;
                 // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
                 // tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
-                tmp_coords.pos[2] += 0.1;
+                if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] += 0.03;
                 set_default_orbit_type(STAIR);
                 first_step_time = default_step_time;
             }

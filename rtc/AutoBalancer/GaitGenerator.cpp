@@ -228,8 +228,7 @@ namespace rats
       // -> 既に対応してそう
       // -> どうやってpointsに入れるか
       if (get_foot_emergency()) {
-          double tmp_height = tmp_start.pos[2] < tmp_goal.pos[2] ? step_height : 0;
-          path_midcoords(ret, tmp_start, tmp_goal, tmp_height, swing_trajectory_generator_idx, default_orbit_type);
+          path_midcoords(ret, tmp_start, tmp_goal, step_height, swing_trajectory_generator_idx, default_orbit_type);
           set_foot_emergency(false);
       } else {
           path_midcoords(ret, it1->worldcoords, it2->worldcoords, step_height, swing_trajectory_generator_idx, default_orbit_type);
@@ -610,11 +609,11 @@ namespace rats
                 int rl = cur_leg == RLEG ? -1 : 1;
                 // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
                 // tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
-                if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] += 0.03;
+                if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02;
                 set_default_orbit_type(STAIR);
                 first_step_time = default_step_time;
             }
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
+            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0)));
             overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
             // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
             set_foot_emergency(true);

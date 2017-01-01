@@ -361,6 +361,7 @@ class Stabilizer
   std::vector<double> cp_check_margin, cp_check_margin_while_walking, tilt_margin;
   double swing_collision_threshold;
   int swing_collision_direction;
+  double early_land_threshold;
   OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
   hrp::dvector servo_pgain_percentage, servo_dgain_percentage;
   double gain_control_time_const;

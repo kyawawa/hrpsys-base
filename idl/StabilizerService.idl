@@ -228,6 +228,8 @@ module OpenHRP
       double swing_collision_threshold;
       /// swing leg collision decision direction (0 ~ 2: force, 3 ~ 6: moment)
       long swing_collision_direction;
+      /// early landing decision threshold [N]
+      double early_land_threshold;
       /// Sequence for all end-effectors' ik limb parameters
       sequence<IKLimbParameters> ik_limb_parameters;
       /// Whether change root link height for avoiding limb stretch

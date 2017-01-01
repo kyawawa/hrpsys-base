@@ -477,8 +477,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   is_emergency = false;
   is_emergency_while_walking = false;
   is_walking_emergency = 0;
-  swing_collision_threshold = 160;
+  swing_collision_threshold = 60;
   swing_collision_direction = 0;
+  early_land_threshold = 50;
   reset_emergency_flag = false;
 
   m_qCurrent.data.length(m_robot->numJoints());
@@ -1593,7 +1594,7 @@ void Stabilizer::calcStateForEmergencySignal()
           // detect early landing by 50[N]
           // if (prev_act_force_z[swing_leg] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
           // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
-          if (early_land && abs_sensor_force[swing_leg](2) > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+          if (early_land && abs_sensor_force[swing_leg](2) > early_land_threshold && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
               if (is_foot_collided) {
                   int max_idx;
                   abs_sensor_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
@@ -2212,6 +2213,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.contact_decision_threshold = contact_decision_threshold;
   i_stp.swing_collision_threshold = swing_collision_threshold;
   i_stp.swing_collision_direction = swing_collision_direction;
+  i_stp.early_land_threshold = early_land_threshold;
   i_stp.is_estop_while_walking = is_estop_while_walking;
   switch(control_mode) {
   case MODE_IDLE: i_stp.controller_mode = OpenHRP::StabilizerService::MODE_IDLE; break;
@@ -2413,6 +2415,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   contact_decision_threshold = i_stp.contact_decision_threshold;
   swing_collision_threshold = i_stp.swing_collision_threshold;
   swing_collision_direction = i_stp.swing_collision_direction;
+  early_land_threshold = i_stp.early_land_threshold;
   is_estop_while_walking = i_stp.is_estop_while_walking;
   use_limb_stretch_avoidance = i_stp.use_limb_stretch_avoidance;
   limb_stretch_avoidance_time_const = i_stp.limb_stretch_avoidance_time_const;
@@ -2504,6 +2507,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   std::cerr << "[" << m_profile.instance_name << "]  contact_decision_threshold = " << contact_decision_threshold << "[N]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  swing_collision_threshold = " << swing_collision_threshold << "[N] or [Nm]" << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]  swing_collision_direction = " << swing_collision_direction <<  std::endl;
+  std::cerr << "[" << m_profile.instance_name << "]  early_land_threshold = " << early_land_threshold << "[N]" << std::endl;
   // IK limb parameters
   std::cerr << "[" << m_profile.instance_name << "]  IK limb parameters" << std::endl;
   bool is_ik_limb_parameter_valid_length = true;

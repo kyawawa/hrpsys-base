@@ -490,7 +490,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_dgainCurrent.data.length(m_robot->numJoints());
   m_pgainRef.data.length(m_robot->numJoints());
   m_dgainRef.data.length(m_robot->numJoints());
-  transition_joint_q.resize(m_robot->numJoints());
+  d_transition_joint_q.resize(m_robot->numJoints());
   qorg.resize(m_robot->numJoints());
   qrefv.resize(m_robot->numJoints());
   transition_count = 0;
@@ -721,7 +721,12 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
           m_qSTRef.data[i] = m_robot->joint(i)->q;
       }
       if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
-      if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
+      if ( transition_count == 0 && !on_ground ) {
+          control_mode = MODE_SYNC_TO_AIR;
+          for (int i = 0; i < m_robot->numJoints(); i++ ) {
+              d_transition_joint_q[i] = m_qRef.data[i] - m_robot->joint(i)->q;
+          }
+      }
       break;
     case MODE_SYNC_TO_IDLE:
       sync_2_idle();
@@ -1296,7 +1301,7 @@ void Stabilizer::getTargetParameters ()
   }
   if (transition_count > 0) {
     for ( int i = 0; i < m_robot->numJoints(); i++ ){
-      m_robot->joint(i)->q = ( m_qRef.data[i] - transition_joint_q[i] ) * transition_smooth_gain + transition_joint_q[i];
+      m_robot->joint(i)->q = m_qRef.data[i] - d_transition_joint_q[i] * (1 - transition_smooth_gain);
     }
   } else {
     for ( int i = 0; i < m_robot->numJoints(); i++ ){
@@ -2035,9 +2040,6 @@ void Stabilizer::sync_2_idle ()
   std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
             << "] Sync ST => IDLE"  << std::endl;
   transition_count = transition_time / dt;
-  for (int i = 0; i < m_robot->numJoints(); i++ ) {
-    transition_joint_q[i] = m_robot->joint(i)->q;
-  }
 }
 
 void Stabilizer::startStabilizer(void)

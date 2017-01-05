@@ -108,7 +108,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   // <rtc-template block="bind_config">
   // Bind variables and configuration variable
   bindParameter("debugLevel", m_debugLevel, "0");
-  
+
   // </rtc-template>
 
   // Registration: InPort/OutPort/Service
@@ -150,15 +150,15 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
   addOutPort("debugData", m_debugDataOut);
-  
+
   // Set service provider to Ports
   m_StabilizerServicePort.registerProvider("service0", "StabilizerService", m_service0);
-  
+
   // Set service consumers to Ports
-  
+
   // Set CORBA Service Ports
   addPort(m_StabilizerServicePort);
-  
+
   // </rtc-template>
   RTC::Properties& prop = getProperties();
   coil::stringTo(dt, prop["dt"].c_str());
@@ -175,7 +175,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 
   // parameters for internal robot model
   m_robot = hrp::BodyPtr(new hrp::Body());
-  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), 
+  if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(),
                                CosNaming::NamingContext::_duplicate(naming.getRootContext())
                                )){
     std::cerr << "[" << m_profile.instance_name << "]failed to load model[" << prop["model"] << "]" << std::endl;
@@ -425,7 +425,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_qCurrent.data.length(m_robot->numJoints());
   m_qRef.data.length(m_robot->numJoints());
   m_tau.data.length(m_robot->numJoints());
-  transition_joint_q.resize(m_robot->numJoints());
+  d_transition_joint_q.resize(m_robot->numJoints());
   qorg.resize(m_robot->numJoints());
   qrefv.resize(m_robot->numJoints());
   transition_count = 0;
@@ -616,7 +616,12 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       } else {
         calcTPCC();
       }
-      if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
+      if ( transition_count == 0 && !on_ground ) {
+          control_mode = MODE_SYNC_TO_AIR;
+          for (int i = 0; i < m_robot->numJoints(); i++ ) {
+              d_transition_joint_q[i] = m_qRef.data[i] - m_robot->joint(i)->q;
+          }
+      }
       break;
     case MODE_SYNC_TO_IDLE:
       sync_2_idle();
@@ -1105,7 +1110,7 @@ void Stabilizer::getTargetParameters ()
   }
   if (transition_count > 0) {
     for ( int i = 0; i < m_robot->numJoints(); i++ ){
-      m_robot->joint(i)->q = ( m_qRef.data[i] - transition_joint_q[i] ) * transition_smooth_gain + transition_joint_q[i];
+      m_robot->joint(i)->q = m_qRef.data[i] - d_transition_joint_q[i] * (1 - transition_smooth_gain);
     }
   } else {
     for ( int i = 0; i < m_robot->numJoints(); i++ ){
@@ -1724,9 +1729,6 @@ void Stabilizer::sync_2_idle ()
   std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
             << "] Sync ST => IDLE"  << std::endl;
   transition_count = transition_time / dt;
-  for (int i = 0; i < m_robot->numJoints(); i++ ) {
-    transition_joint_q[i] = m_robot->joint(i)->q;
-  }
 }
 
 void Stabilizer::startStabilizer(void)
@@ -2630,5 +2632,3 @@ extern "C"
   }
 
 };
-
-

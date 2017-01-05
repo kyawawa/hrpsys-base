@@ -323,6 +323,7 @@ class Stabilizer
   int transition_count, loop;
   int m_is_falling_counter;
   std::vector<int> m_will_fall_counter;
+  int sync_to_air_counter, sync_to_air_max_counter;
   bool is_legged_robot, on_ground, is_emergency, is_emergency_while_walking, is_seq_interpolating, reset_emergency_flag, eefm_use_force_difference_control, eefm_use_swing_damping, initial_cp_too_large_error, use_limb_stretch_avoidance, use_servo_gain_control;
   int  is_walking_emergency;
   bool is_walking, is_estop_while_walking;

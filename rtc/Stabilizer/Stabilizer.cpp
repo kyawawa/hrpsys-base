@@ -452,6 +452,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   foot_acc_ref = hrp::Vector3::Zero();
   swing_collision_offset.resize(2, 0.1);
   early_land_offset.resize(2, 0.1);
+  sync_to_air_max_counter = static_cast<int>(0.2 / dt); // [s]
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -496,6 +497,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   transition_count = 0;
   loop = 0;
   m_is_falling_counter = 0;
+  sync_to_air_counter = 0;
   total_mass = m_robot->totalMass();
   ref_zmp_aux = hrp::Vector3::Zero();
   m_actContactStates.data.length(m_contactStates.data.length());
@@ -721,7 +723,10 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
           m_qSTRef.data[i] = m_robot->joint(i)->q;
       }
       if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
-      if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
+      if ( transition_count == 0 && !on_ground ) {
+          if (sync_to_air_counter < sync_to_air_max_counter) ++sync_to_air_counter;
+          else control_mode = MODE_SYNC_TO_AIR;
+      } else sync_to_air_counter = 0;
       break;
     case MODE_SYNC_TO_IDLE:
       sync_2_idle();
@@ -2228,6 +2233,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.use_limb_stretch_avoidance = use_limb_stretch_avoidance;
   i_stp.limb_stretch_avoidance_time_const = limb_stretch_avoidance_time_const;
   i_stp.limb_length_margin.length(stikp.size());
+  i_stp.sync_to_air_max_time = sync_to_air_max_counter * dt;
   for (size_t i = 0; i < 2; i++) {
     i_stp.limb_stretch_avoidance_vlimit[i] = limb_stretch_avoidance_vlimit[i];
   }
@@ -2424,6 +2430,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   }
   use_servo_gain_control = i_stp.use_servo_gain_control;
   gain_control_time_const = i_stp.gain_control_time_const;
+  sync_to_air_max_counter = static_cast<int>(i_stp.sync_to_air_max_time / dt);
   if (control_mode == MODE_IDLE) {
       for (size_t i = 0; i < i_stp.end_effector_list.length(); i++) {
           std::vector<STIKParam>::iterator it = std::find_if(stikp.begin(), stikp.end(), (&boost::lambda::_1->* &std::vector<STIKParam>::value_type::ee_name == std::string(i_stp.end_effector_list[i].leg)));

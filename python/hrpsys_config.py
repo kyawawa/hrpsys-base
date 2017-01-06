@@ -906,6 +906,7 @@ class HrpsysConfigurator(object):
             for sen in self.sensors:
                 self.connectLoggerPort(self.st, "abs" + sen.name)
                 self.connectLoggerPort(self.st, "abs" + sen.name + "Compensation")
+                self.connectLoggerPort(self.st, "prevActForce" + sen.name)
         if self.el != None:
             self.connectLoggerPort(self.el, 'q')
         if self.rh != None:

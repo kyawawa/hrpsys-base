@@ -144,7 +144,7 @@ class Stabilizer
 
   inline bool isContact (const size_t idx) // 0 = right, 1 = left
   {
-    return (prev_act_force_z[idx] > 25.0);
+    return (prev_act_force[idx](2) > 25.0);
   };
 
  protected:
@@ -197,6 +197,7 @@ class Stabilizer
   RTC::TimedDoubleSeq m_absActEERpy;
   std::vector<RTC::TimedDoubleSeq> m_absForce;
   std::vector<RTC::TimedDoubleSeq> m_absForceCompensation;
+  std::vector<RTC::TimedDoubleSeq> m_prevActForce;
   RTC::TimedDoubleSeq m_debugData;
 
   // DataInPort declaration
@@ -257,6 +258,7 @@ class Stabilizer
   RTC::OutPort<RTC::TimedDoubleSeq> m_absActEERpyOut;
   std::vector<RTC::OutPort<RTC::TimedDoubleSeq> *> m_absForceOut;
   std::vector<RTC::OutPort<RTC::TimedDoubleSeq> *> m_absForceCompensationOut;
+  std::vector<RTC::OutPort<RTC::TimedDoubleSeq> *> m_prevActForceOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_debugDataOut;
 
   // </rtc-template>
@@ -298,7 +300,7 @@ class Stabilizer
     double swing_support_gain, support_time;
     // For swing ee modification
     boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> > target_ee_diff_p_filter, target_ee_diff_r_filter;
-    std::vector<IIRFilterPtr> target_ee_pos_acc_filter;
+    std::vector<IIRFilterPtr> target_ee_pos_acc_filter, prev_act_force_filter;
     hrp::Vector3 target_ee_diff_p, d_pos_swing, d_rpy_swing, prev_d_pos_swing, prev_d_rpy_swing;
     hrp::Matrix33 target_ee_diff_r;
     // IK parameter
@@ -329,7 +331,7 @@ class Stabilizer
   bool is_walking, is_estop_while_walking;
   hrp::Vector3 current_root_p, target_root_p, ref_foot_origin_pos;
   hrp::Matrix33 current_root_R, target_root_R, prev_act_foot_origin_rot, prev_ref_foot_origin_rot, target_foot_origin_rot, ref_foot_origin_rot;
-  std::vector <hrp::Vector3> target_ee_p, rel_ee_pos, act_ee_p, prev_abs_act_ee_p, abs_act_ee_p, prev_abs_act_ee_p_vel, abs_act_ee_p_vel, abs_act_ee_p_acc, projected_normal, act_force;
+  std::vector <hrp::Vector3> target_ee_p, rel_ee_pos, act_ee_p, prev_abs_act_ee_p, abs_act_ee_p, prev_abs_act_ee_p_vel, abs_act_ee_p_vel, abs_act_ee_p_acc, projected_normal, act_force, prev_act_force;
   std::vector <hrp::Matrix33> target_ee_R, rel_ee_rot, act_ee_R, abs_act_ee_R;
   std::vector<hrp::dvector6> abs_sensor_force, abs_sensor_force_compensation;
   std::vector<std::string> rel_ee_name;
@@ -337,7 +339,7 @@ class Stabilizer
   hrp::Vector3 ref_zmp, ref_cog, abs_ref_cog, ref_cp, ref_cogvel, abs_ref_cogvel, rel_ref_cp, prev_ref_cog, prev_ref_zmp;
   hrp::Vector3 act_zmp, act_cog, abs_act_cog, act_cogvel, abs_act_cogvel, act_cp, rel_act_zmp, rel_act_cp, prev_act_cog, act_base_rpy, current_base_rpy, current_base_pos, sbp_cog_offset, cp_offset;
   hrp::Vector3 foot_origin_offset[2];
-  std::vector<double> prev_act_force_z;
+  // std::vector<double> prev_act_force_z;
   double zmp_origin_off, transition_smooth_gain, d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];
   boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> > act_cogvel_filter;
   OpenHRP::StabilizerService::STAlgorithm st_algorithm;

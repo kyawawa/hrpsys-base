@@ -310,10 +310,14 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       ikp.target_ee_diff_p_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.target_ee_diff_r_filter = boost::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> >(new FirstOrderLowPassFilter<hrp::Vector3>(50.0, dt, hrp::Vector3::Zero())); // [Hz]
       ikp.target_ee_pos_acc_filter.resize(3);
+      ikp.prev_act_force_filter.resize(3); // act force filter
       for (size_t j = 0; j < 3; ++j) {
           ikp.target_ee_pos_acc_filter[j] = IIRFilterPtr(new IIRFilter());
           ikp.target_ee_pos_acc_filter[j]->setDataHZ(1.0 / dt);
           ikp.target_ee_pos_acc_filter[j]->setCutOffFreq(10.0); // [Hz]
+          ikp.prev_act_force_filter[j] = IIRFilterPtr(new IIRFilter());
+          ikp.prev_act_force_filter[j]->setDataHZ(1.0 / dt);
+          ikp.prev_act_force_filter[j]->setCutOffFreq(5.0); // [Hz]
       }
       ikp.prev_d_pos_swing = hrp::Vector3::Zero();
       ikp.prev_d_rpy_swing = hrp::Vector3::Zero();
@@ -349,7 +353,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
       std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "]" << std::endl;
       std::cerr << "[" << m_profile.instance_name << "]   target = " << m_robot->link(ikp.target_name)->name << ", base = " << ee_base << ", sensor_name = " << ikp.sensor_name << std::endl;
       std::cerr << "[" << m_profile.instance_name << "]   offset_pos = " << ikp.localp.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
-      prev_act_force_z.push_back(0.0);
+      // prev_act_force_z.push_back(0.0);
+      prev_act_force.push_back(hrp::Vector3::Zero());
     }
     m_contactStates.data.length(num);
     m_toeheelRatio.data.length(num);
@@ -537,14 +542,19 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_absForceOut.resize(npforce);
   m_absForceCompensation.resize(npforce);
   m_absForceCompensationOut.resize(npforce);
+  m_prevActForce.resize(npforce);
+  m_prevActForceOut.resize(npforce);
   for (unsigned int i = 0; i < npforce; ++i) {
       hrp::Sensor* sen = m_robot->sensor(hrp::Sensor::FORCE, i);
       m_absForceOut[i] = new RTC::OutPort<RTC::TimedDoubleSeq>(("abs" + sen->name).c_str(), m_absForce[i]);
       m_absForceCompensationOut[i] = new RTC::OutPort<RTC::TimedDoubleSeq>(("abs" + sen->name + "Compensation").c_str(), m_absForceCompensation[i]);
+      m_prevActForceOut[i] = new RTC::OutPort<RTC::TimedDoubleSeq>(("prevActForce" + sen->name).c_str(), m_prevActForce[i]);
       m_absForce[i].data.length(6);
       m_absForceCompensation[i].data.length(6);
+      m_prevActForce[i].data.length(3);
       registerOutPort(("abs" + sen->name).c_str(), *m_absForceOut[i]);
       registerOutPort(("abs" + sen->name + "Compensation").c_str(), *m_absForceCompensationOut[i]);
+      registerOutPort(("prevActForce" + sen->name).c_str(), *m_prevActForceOut[i]);
       abs_sensor_force.push_back(hrp::dvector6::Zero());
       abs_sensor_force_compensation.push_back(hrp::dvector6::Zero());
   }
@@ -864,6 +874,13 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
         m_absForceOut[i]->write();
         m_absForceCompensation[i].tm = m_qRef.tm;
         m_absForceCompensationOut[i]->write();
+    }
+    for (size_t i = 0; i < m_prevActForce.size(); ++i) {
+        for (size_t j = 0; j < m_prevActForce[i].data.length(); ++j) {
+            m_prevActForce[i].data[j] = prev_act_force[i](j);
+        }
+        m_prevActForce[i].tm = m_qRef.tm;
+        m_prevActForceOut[i]->write();
     }
     if (use_servo_gain_control && is_walking) {
         for (size_t i = 0; i < m_robot->numJoints(); ++i) {
@@ -1420,8 +1437,11 @@ bool Stabilizer::calcZMP(hrp::Vector3& ret_zmp, const double zmp_z)
     m_COPInfo.data[i*3] = tmpcopmx;
     m_COPInfo.data[i*3+1] = tmpcopmy;
     m_COPInfo.data[i*3+2] = tmpcopfz;
-    prev_act_force_z[i] = 0.85 * prev_act_force_z[i] + 0.15 * nf(2); // filter, cut off 5[Hz]
-    tmpfz2 += prev_act_force_z[i];
+    // prev_act_force_z[i] = 0.85 * prev_act_force_z[i] + 0.15 * nf(2); // filter, cut off 5[Hz]
+    for (size_t j = 0; j < 3; ++j) {
+        prev_act_force[i](j) = stikp[i].prev_act_force_filter[j]->passFilter(nf(j));
+    }
+    tmpfz2 += prev_act_force[i](2);
   }
   if (tmpfz2 < contact_decision_threshold) {
     ret_zmp = act_zmp;
@@ -1576,15 +1596,15 @@ void Stabilizer::calcStateForEmergencySignal()
           }
           static double swing_time = m_controlSwingSupportTime.data[swing_leg];
           static bool early_land = true;
-          if (contact_states != prev_contact_states) {
+          if (contact_states != prev_contact_states) { // 遊脚再生成未対応?
               swing_time = m_controlSwingSupportTime.data[swing_leg];
               early_land = true;
           }
           double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
           if ((swing_time - remain_swing_time) > swing_collision_offset[0] && remain_swing_time > swing_collision_offset[1]) { // ignore the beginning and the end of swinging phase
-              // if (abs_sensor_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
+              // if (prev_act_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
               // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
-              if (std::fabs(abs_sensor_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
+              if (std::fabs(prev_act_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
                   ++is_foot_collided;
                   std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
                   Eigen::Vector2d tmp_cp;
@@ -1596,13 +1616,12 @@ void Stabilizer::calcStateForEmergencySignal()
               }
           }
           // ignore the beginning and the end of swinging phase
-          // detect early landing by 50[N]
-          // if (prev_act_force_z[swing_leg] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+          // detect early landing
           // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
-          if (early_land && abs_sensor_force[swing_leg](2) > early_land_threshold && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+          if (early_land && prev_act_force[swing_leg](2) > early_land_threshold && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
               if (is_foot_collided) {
                   int max_idx;
-                  abs_sensor_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
+                  prev_act_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
                   if (max_idx == 2) {
                       is_foot_collided = 3;
                       early_land = false;
@@ -2025,6 +2044,9 @@ void Stabilizer::sync_2_st ()
     ikp.target_ee_diff_p_filter->reset(hrp::Vector3::Zero());
     ikp.target_ee_diff_r_filter->reset(hrp::Vector3::Zero());
     ikp.d_foot_pos = ikp.d_foot_rpy = ikp.ee_d_foot_rpy = hrp::Vector3::Zero();
+    for (size_t j = 0; j < ikp.prev_act_force_filter.size(); ++j) {
+        ikp.prev_act_force_filter[j]->reset(0.0);
+    }
   }
   if (on_ground) {
     transition_count = -1 * transition_time / dt;
@@ -2111,6 +2133,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
   i_stp.eefm_ee_moment_limit.length(stikp.size());
   i_stp.eefm_ee_forcemoment_distribution_weight.length(stikp.size());
   i_stp.eefm_ee_pos_acc_cutoff_freq.length(stikp.size());
+  i_stp.eefm_prev_act_force_cutoff_freq.length(stikp.size());
   i_stp.swing_servo_pgain_percentage.length(stikp.size());
   i_stp.swing_servo_dgain_percentage.length(stikp.size());
   for (size_t j = 0; j < stikp.size(); j++) {
@@ -2125,6 +2148,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       i_stp.eefm_ee_moment_limit[j].length(3);
       i_stp.eefm_ee_forcemoment_distribution_weight[j].length(6);
       i_stp.eefm_ee_pos_acc_cutoff_freq[j].length(3);
+      i_stp.eefm_prev_act_force_cutoff_freq[j].length(3);
       i_stp.swing_servo_pgain_percentage[j].length(jpe_v[j]->numJoints());
       i_stp.swing_servo_dgain_percentage[j].length(jpe_v[j]->numJoints());
       for (size_t i = 0; i < 3; i++) {
@@ -2140,6 +2164,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i] = stikp[j].eefm_ee_forcemoment_distribution_weight(i);
           i_stp.eefm_ee_forcemoment_distribution_weight[j][i+3] = stikp[j].eefm_ee_forcemoment_distribution_weight(i+3);
           i_stp.eefm_ee_pos_acc_cutoff_freq[j][i] = stikp[j].target_ee_pos_acc_filter[i]->getCutOffFreq();
+          i_stp.eefm_prev_act_force_cutoff_freq[j][i] = stikp[j].prev_act_force_filter[i]->getCutOffFreq();
       }
       for (size_t i = 0; i < jpe_v[j]->numJoints(); ++i) {
           i_stp.swing_servo_pgain_percentage[j][i] = stikp[j].swing_servo_pgain_percentage(i);
@@ -2329,7 +2354,8 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
        i_stp.eefm_swing_rot_time_const.length () == stikp.size() &&
        i_stp.eefm_ee_moment_limit.length () == stikp.size() &&
        i_stp.eefm_ee_forcemoment_distribution_weight.length () == stikp.size() &&
-       i_stp.eefm_ee_pos_acc_cutoff_freq.length() == stikp.size()) {
+       i_stp.eefm_ee_pos_acc_cutoff_freq.length() == stikp.size() &&
+       i_stp.eefm_prev_act_force_cutoff_freq.length() == stikp.size()) {
       is_damping_parameter_ok = true;
       for (size_t j = 0; j < stikp.size(); j++) {
           for (size_t i = 0; i < 3; i++) {
@@ -2345,6 +2371,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
               stikp[j].eefm_ee_forcemoment_distribution_weight(i) = i_stp.eefm_ee_forcemoment_distribution_weight[j][i];
               stikp[j].eefm_ee_forcemoment_distribution_weight(i+3) = i_stp.eefm_ee_forcemoment_distribution_weight[j][i+3];
               stikp[j].target_ee_pos_acc_filter[i]->setCutOffFreq(i_stp.eefm_ee_pos_acc_cutoff_freq[j][i]);
+              stikp[j].prev_act_force_filter[i]->setCutOffFreq(i_stp.eefm_prev_act_force_cutoff_freq[j][i]);
           }
           stikp[j].eefm_pos_compensation_limit = i_stp.eefm_pos_compensation_limit[j];
           stikp[j].eefm_rot_compensation_limit = i_stp.eefm_rot_compensation_limit[j];
@@ -2490,6 +2517,9 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
                     << "eefm_ee_forcemoment_distribution_weight = " << stikp[j].eefm_ee_forcemoment_distribution_weight.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "" << std::endl;
           std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
                     << "eefm_ee_pos_acc_cutoff_freq = " << stikp[j].target_ee_pos_acc_filter[0]->getCutOffFreq() << "[Hz]" << std::endl;
+          std::cerr << "[" << m_profile.instance_name << "]   [" << stikp[j].ee_name << "] "
+                    << "eefm_prev_act_force_cutoff_freq = " << stikp[j].prev_act_force_filter[0]->getCutOffFreq() << "[Hz]" << std::endl;
+
       }
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   eefm damping parameters cannot be set because of invalid param." << std::endl;

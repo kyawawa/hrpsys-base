@@ -722,7 +722,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       for (size_t i = 0; i < m_robot->numJoints(); ++i) {
           m_qSTRef.data[i] = m_robot->joint(i)->q;
       }
-      if (use_servo_gain_control && is_walking) gainControl(gain_control_time_const);
+      if (use_servo_gain_control) gainControl(gain_control_time_const);
       if ( transition_count == 0 && !on_ground ) {
           if (sync_to_air_counter < sync_to_air_max_counter) ++sync_to_air_counter;
           else control_mode = MODE_SYNC_TO_AIR;
@@ -1915,9 +1915,9 @@ void Stabilizer::gainControl(const double T)
 {
     double remain_swing_time = m_controlSwingSupportTime.data[0];
     STIKParam next_swing_ikp = stikp[0];
-    size_t swing_joint_num = 0;
-    bool is_swing_contact = true;
-    for (size_t i = 0; i < stikp.size(); i++) {
+    size_t swing_joint_num = jpe_v[0]->numJoints();
+    bool is_swing_contact = isContact(0);
+    for (size_t i = 1; i < stikp.size(); i++) {
         if (m_controlSwingSupportTime.data[i] < remain_swing_time) { // 小さいほうが次の遊脚 or 現在の遊脚
             remain_swing_time = m_controlSwingSupportTime.data[i];
             next_swing_ikp = stikp[i];

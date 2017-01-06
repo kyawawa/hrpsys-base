@@ -861,6 +861,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_currentBasePosOut.write();
       m_qSTRef.tm = m_qRef.tm;
       m_qSTRefOut.write();
+      m_debugData.data[0] = control_mode;
       m_debugData.tm = m_qRef.tm;
       m_debugDataOut.write();
     }

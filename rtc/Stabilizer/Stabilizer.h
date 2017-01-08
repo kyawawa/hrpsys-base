@@ -370,6 +370,8 @@ class Stabilizer
   double gain_control_time_const;
   hrp::Vector3 foot_acc_ref;
   std::vector<double> swing_collision_offset;
+  double swing_time, remain_swing_time;
+  bool early_landing;
   std::vector<double> early_land_offset;
 };
 

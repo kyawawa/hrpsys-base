@@ -456,6 +456,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   gain_control_time_const = 0.4;
   foot_acc_ref = hrp::Vector3::Zero();
   swing_collision_offset.resize(2, 0.1);
+  swing_time = 0;
+  remain_swing_time = 0;
+  early_landing = false;
   early_land_offset.resize(2, 0.1);
   sync_to_air_max_counter = static_cast<int>(0.2 / dt); // [s]
 
@@ -1595,41 +1598,46 @@ void Stabilizer::calcStateForEmergencySignal()
               swing_leg = contact_states_index_map["rleg"];
               support_leg = SimpleZMPDistributor::LLEG;
           }
-          static double swing_time = m_controlSwingSupportTime.data[swing_leg];
-          static bool early_land = true;
-          if (contact_states != prev_contact_states) { // 遊脚再生成未対応?
+          // if (contact_states != prev_contact_states) { // 遊脚再生成未対応?
+          //     swing_time = m_controlSwingSupportTime.data[swing_leg];
+          //     early_landing = false;
+          // }
+          if (remain_swing_time < m_controlSwingSupportTime.data[swing_leg]) {
               swing_time = m_controlSwingSupportTime.data[swing_leg];
-              early_land = true;
+              early_landing = false;
           }
-          double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
-          if ((swing_time - remain_swing_time) > swing_collision_offset[0] && remain_swing_time > swing_collision_offset[1]) { // ignore the beginning and the end of swinging phase
-              // if (prev_act_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
-              // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
-              if (std::fabs(prev_act_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
-                  ++is_foot_collided;
-                  std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
-                  Eigen::Vector2d tmp_cp;
-                  for (size_t i = 0; i < 2; i++) {
-                      tmp_cp(i) = act_cp(i);
+          remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
+          if (!early_landing) {
+              double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
+              if ((swing_time - remain_swing_time) > swing_collision_offset[0] && remain_swing_time > swing_collision_offset[1]) { // ignore the beginning and the end of swinging phase
+                  // if (prev_act_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
+                  // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
+                  if (std::fabs(prev_act_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
+                      ++is_foot_collided;
+                      std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
+                      Eigen::Vector2d tmp_cp;
+                      for (size_t i = 0; i < 2; i++) {
+                          tmp_cp(i) = act_cp(i);
+                      }
+                      is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
+                      if (is_cp_outside) ++is_foot_collided;
                   }
-                  is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
-                  if (is_cp_outside) ++is_foot_collided;
               }
-          }
-          // ignore the beginning and the end of swinging phase
-          // detect early landing
-          // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
-          if (early_land && prev_act_force[swing_leg](2) > early_land_threshold && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
-              if (is_foot_collided) {
-                  int max_idx;
-                  prev_act_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
-                  if (max_idx == 2) {
+              // ignore the beginning and the end of swinging phase
+              // detect early landing
+              // if (m_wrenches[swing_leg].data[2] > 50 && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+              if (prev_act_force[swing_leg](2) > early_land_threshold && (swing_time - remain_swing_time) > early_land_offset[0] && remain_swing_time > early_land_offset[1]) {
+                  if (is_foot_collided) {
+                      int max_idx;
+                      prev_act_force[swing_leg].segment(0, 3).cwiseAbs().maxCoeff(&max_idx);
+                      if (max_idx == 2) {
+                          is_foot_collided = 3;
+                          early_landing = true;
+                      }
+                  } else {
                       is_foot_collided = 3;
-                      early_land = false;
+                      early_landing = true;
                   }
-              } else {
-                  is_foot_collided = 3;
-                  early_land = false;
               }
           }
       }

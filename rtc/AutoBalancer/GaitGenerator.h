@@ -792,7 +792,7 @@ namespace rats
       std::vector<step_node> support_leg_steps;
       // Swing leg coordinates is interpolated from swing_leg_src_coords to swing_leg_dst_coords during swing phase.
       std::vector<step_node> swing_leg_steps, swing_leg_src_steps, swing_leg_dst_steps;
-      double default_step_height, default_top_ratio, current_step_height, swing_ratio, swing_rot_ratio, prev_foot_midcoords_ratio, foot_midcoords_ratio, dt, current_toe_angle, current_heel_angle;
+      double default_step_height, default_top_ratio, current_step_height, swing_ratio, swing_rot_ratio, prev_foot_midcoords_ratio, foot_midcoords_ratio, dt, current_toe_angle, current_heel_angle, default_double_support_ratio_swing_before, default_double_support_ratio_swing_after, cur_double_support_ratio_swing_before, cur_double_support_ratio_swing_after;
       double time_offset, final_distance_weight, time_offset_xy2z;
       std::vector<double> current_swing_time;
       // Index for current footstep. footstep_index should be [0,footstep_node_list.size()]. Current footstep is footstep_node_list[footstep_index].
@@ -848,6 +848,8 @@ namespace rats
         : support_leg_steps(), swing_leg_steps(), swing_leg_src_steps(), swing_leg_dst_steps(),
           default_step_height(0.05), default_top_ratio(0.5), current_step_height(0.0), swing_ratio(0), swing_rot_ratio(0), prev_foot_midcoords_ratio(0), foot_midcoords_ratio(0), dt(_dt),
           current_toe_angle(0), current_heel_angle(0),
+          default_double_support_ratio_swing_before(0.1), default_double_support_ratio_swing_after(0.1),
+          cur_double_support_ratio_swing_before(0.1), cur_double_support_ratio_swing_after(0.1),
           time_offset(0.35), final_distance_weight(1.0), time_offset_xy2z(0),
           footstep_index(0), lcg_count(0), default_orbit_type(CYCLOID),
           rdtg(), cdtg(), dhtg(),
@@ -919,6 +921,10 @@ namespace rats
       void set_use_toe_joint (const bool ut) { use_toe_joint = ut; };
       void set_use_toe_heel_auto_set (const bool ut) { use_toe_heel_auto_set = ut; };
       void set_foot_emergency (const bool fe) { foot_emergency = fe; };
+      void set_default_double_support_ratio_swing_before (const double _ratio) { default_double_support_ratio_swing_before = _ratio; };
+      void set_default_double_support_ratio_swing_after (const double _ratio) { default_double_support_ratio_swing_after = _ratio; };
+      void set_cur_double_support_ratio_swing_before (const double _ratio) { cur_double_support_ratio_swing_before = _ratio; };
+      void set_cur_double_support_ratio_swing_after (const double _ratio) { cur_double_support_ratio_swing_after = _ratio; };
       void set_swing_support_steps_list (const std::vector< std::vector<step_node> >& fnsl)
       {
           std::vector<step_node> prev_support_leg_steps = support_leg_steps_list.front();
@@ -967,6 +973,8 @@ namespace rats
         thp.set_one_step_count(one_step_count);
         footstep_index = 0;
         current_step_height = 0.0;
+        cur_double_support_ratio_swing_before = default_double_support_ratio_before;
+        cur_double_support_ratio_swing_after = default_double_support_ratio_after;
         switch (default_orbit_type) {
         // case RECTANGLE:
         //     rdtg.clear();
@@ -1104,6 +1112,8 @@ namespace rats
       const std::vector<leg_type>& get_support_leg_types() const { return support_leg_types;};
       const std::vector<leg_type>& get_swing_leg_types() const { return swing_leg_types;};
       double get_default_step_height () const { return default_step_height;};
+      double get_cur_double_support_ratio_swing_before () const { return cur_double_support_ratio_swing_before; };
+      double get_cur_double_support_ratio_swing_after () const { return cur_double_support_ratio_swing_after; };
       void get_swing_support_mid_coords(coordinates& ret) const
       {
         std::vector<coordinates> swg_coords, sup_coords;
@@ -1390,8 +1400,16 @@ namespace rats
     void set_default_double_support_ratio_after (const double _default_double_support_ratio_after) { default_double_support_ratio_after = _default_double_support_ratio_after; };
     void set_default_double_support_static_ratio_before (const double _default_double_support_static_ratio_before) { default_double_support_static_ratio_before = _default_double_support_static_ratio_before; };
     void set_default_double_support_static_ratio_after (const double _default_double_support_static_ratio_after) { default_double_support_static_ratio_after = _default_double_support_static_ratio_after; };
-    void set_default_double_support_ratio_swing_before (const double _default_double_support_ratio_swing_before) { default_double_support_ratio_swing_before = _default_double_support_ratio_swing_before; };
-    void set_default_double_support_ratio_swing_after (const double _default_double_support_ratio_swing_after) { default_double_support_ratio_swing_after = _default_double_support_ratio_swing_after; };
+    void set_default_double_support_ratio_swing_before (const double _default_double_support_ratio_swing_before)
+    {
+        default_double_support_ratio_swing_before = _default_double_support_ratio_swing_before;
+        lcg.set_default_double_support_ratio_swing_before(_default_double_support_ratio_swing_before);
+    };
+    void set_default_double_support_ratio_swing_after (const double _default_double_support_ratio_swing_after)
+    {
+        default_double_support_ratio_swing_after = _default_double_support_ratio_swing_after;
+        lcg.set_default_double_support_ratio_swing_after(_default_double_support_ratio_swing_after);
+    };
     void set_default_zmp_offsets(const std::vector<hrp::Vector3>& tmp) { rg.set_default_zmp_offsets(tmp); };
     void set_toe_zmp_offset_x (const double _off) { rg.set_toe_zmp_offset_x(_off); };
     void set_heel_zmp_offset_x (const double _off) { rg.set_heel_zmp_offset_x(_off); };
@@ -1435,6 +1453,8 @@ namespace rats
     };
     void set_use_toe_joint (const bool ut) { lcg.set_use_toe_joint(ut); };
     void set_foot_emergency (const bool fe) { lcg.set_foot_emergency(fe); };
+    void set_cur_double_support_ratio_swing_before (const double _ratio) { lcg.set_cur_double_support_ratio_swing_before(_ratio); };
+    void set_cur_double_support_ratio_swing_after (const double _ratio) { lcg.set_cur_double_support_ratio_swing_after(_ratio); };
     void set_leg_default_translate_pos (const std::vector<hrp::Vector3>& off) { footstep_param.leg_default_translate_pos = off;};
     void set_optional_go_pos_finalize_footstep_num (const size_t num) { optional_go_pos_finalize_footstep_num = num; };
     void set_all_limbs (const std::vector<std::string>& _all_limbs) { all_limbs = _all_limbs; };
@@ -1612,6 +1632,8 @@ namespace rats
     double get_default_double_support_static_ratio_after () const { return default_double_support_static_ratio_after; };
     double get_default_double_support_ratio_swing_before () const {return default_double_support_ratio_swing_before; };
     double get_default_double_support_ratio_swing_after () const {return default_double_support_ratio_swing_after; };
+    double get_cur_double_support_ratio_swing_before () const { return lcg.get_cur_double_support_ratio_swing_before(); };
+    double get_cur_double_support_ratio_swing_after () const { return lcg.get_cur_double_support_ratio_swing_after(); };
     std::vector< std::vector<step_node> > get_remaining_footstep_nodes_list () const
     {
         std::vector< std::vector<step_node> > fsnl;

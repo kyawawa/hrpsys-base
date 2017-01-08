@@ -266,7 +266,7 @@ namespace rats
           if (swing_leg_src_steps.size() == 1) /* only biped or crawl because there is only one toe_heel_interpolator */
               modif_foot_coords_for_toe_heel_phase(ret, _current_toe_angle, _current_heel_angle);
       }
-      rets.push_back(step_node(it1->l_r, ret, 0, 0, 0, 0));
+      rets.push_back(step_node(it1->l_r, ret, step_height, swing_leg_src_steps.front().step_time, 0, 0));
     }
   };
 
@@ -484,11 +484,11 @@ namespace rats
     if ( 1 <= lcg_count ) {
       lcg_count--;
     } else {
+      cur_double_support_ratio_swing_before = default_double_support_ratio_swing_before;
+      cur_double_support_ratio_swing_after = default_double_support_ratio_swing_after;
       // std::cerr << "gp " << footstep_index << std::endl;
       if (footstep_index < fnsl.size() - 1) {
         footstep_index++;
-      }
-      if (footstep_index < fnsl.size() - 1) {
         current_step_height = fnsl[footstep_index].front().step_height;
         current_toe_angle = fnsl[footstep_index].front().toe_angle;
         current_heel_angle = fnsl[footstep_index].front().heel_angle;
@@ -504,7 +504,7 @@ namespace rats
       }
       lcg_count = one_step_count;
       for (size_t i = 0; i < dhtg.size(); i++) {
-          dhtg[i].reset(one_step_count, default_double_support_ratio_before, default_double_support_ratio_after);
+          dhtg[i].reset(one_step_count, default_double_support_ratio_swing_before, default_double_support_ratio_swing_after);
       }
       // switch (default_orbit_type) {
       // case RECTANGLE:
@@ -589,7 +589,7 @@ namespace rats
     solved = false;
 
     /* update refzmp */
-    if (emergency_flg == EMERGENCY_STOP && lcg.get_footstep_index() > 0) {
+    if (emergency_flg == EMERGENCY_STOP) { // && lcg.get_footstep_index() > 0) { // 遊脚再生成未対応
         leg_type cur_leg = footstep_nodes_list[lcg.get_footstep_index()].front().l_r;
         leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
 
@@ -632,7 +632,8 @@ namespace rats
 
             // lcg.reset(static_cast<size_t>(default_double_support_ratio_before * one_step_len), static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), footstep_nodes_list[lcg.get_footstep_index()], footstep_nodes_list[lcg.get_footstep_index() - 1], default_double_support_ratio_before, default_double_support_ratio_after);
             lcg.reset(one_step_len, static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), tmp_swing_leg_src_steps, get_support_leg_steps(), default_double_support_ratio_before, default_double_support_ratio_after);
-            // lcg.set_lcg_count(static_cast<size_t>(one_step_len * (1 - default_double_support_ratio_before)));
+            // lcg.set_lcg_count(static_cast<size_t>(one_step_len * (1 - default_double_support_ratio_before))); // 歩き始めを検知するために，やはりdefault_double_support_ratio_beforeを0にすべき？
+            lcg.set_cur_double_support_ratio_swing_before(0.002); // todo: どっかで0除算が起こっていそう
         }
 
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
@@ -786,7 +787,7 @@ namespace rats
 
     /* update swing_leg_coords, support_leg_coords */
     if ( solved ) {
-      lcg.update_leg_steps(footstep_nodes_list, default_double_support_ratio_swing_before, default_double_support_ratio_swing_after, thtc);
+      lcg.update_leg_steps(footstep_nodes_list, lcg.get_cur_double_support_ratio_swing_before(), default_double_support_ratio_swing_after, thtc);
     } else if (finalize_count>0) {
       lcg.clear_interpolators();
     }

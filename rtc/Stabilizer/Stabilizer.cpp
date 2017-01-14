@@ -1628,8 +1628,9 @@ void Stabilizer::calcStateForEmergencySignal()
                       for (size_t i = 0; i < 2; i++) {
                           tmp_cp(i) = act_cp(i);
                       }
-                      is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
-                      if (is_cp_outside) ++is_foot_collided;
+                      // is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
+                      // if (is_cp_outside) ++is_foot_collided;
+                      if (is_cp_outside_while_walking) ++is_foot_collided;
                   }
               }
               // ignore the beginning and the end of swinging phase

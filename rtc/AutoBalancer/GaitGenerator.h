@@ -822,7 +822,7 @@ namespace rats
       bool foot_emergency;
       coordinates tmp_start, tmp_goal;
       coordinates prev_mid_coords_to_dst;
-      hrp::Vector3 foot_acc;
+      hrp::Vector3 foot_pos, foot_acc;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -864,6 +864,7 @@ namespace rats
         sdtg.set_dt(dt);
         cdktg.set_dt(dt);
         crdtg.set_dt(dt);
+        foot_pos = hrp::Vector3::Zero();
         foot_acc = hrp::Vector3::Zero();
         if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt);
         if (swing_foot_rot_ratio_interpolator == NULL) swing_foot_rot_ratio_interpolator = new interpolator(1, dt);
@@ -1175,6 +1176,7 @@ namespace rats
       double get_swing_trajectory_delay_time_offset () const { return time_offset; };
       double get_swing_trajectory_final_distance_weight () const { return final_distance_weight; };
       double get_swing_trajectory_time_offset_xy2z () const { return time_offset_xy2z; };
+      hrp::Vector3 get_foot_pos_ref () const { return foot_pos; };
       hrp::Vector3 get_foot_acc_ref () const { return foot_acc; };
       hrp::Vector3 get_stair_trajectory_way_point_offset () const { return sdtg.get_stair_trajectory_way_point_offset(); };
       hrp::Vector3 get_cycloid_delay_kick_point_offset () const { return cdktg.get_cycloid_delay_kick_point_offset() ; };
@@ -1663,6 +1665,7 @@ namespace rats
     bool get_foot_emergency () const { return lcg.get_foot_emergency(); };
     double get_prev_foot_midcoords_ratio () const { return lcg.get_prev_foot_midcoords_ratio(); };
     double get_foot_midcoords_ratio () const { return lcg.get_foot_midcoords_ratio(); };
+    hrp::Vector3 get_foot_pos_ref () const { return lcg.get_foot_pos_ref(); };
     hrp::Vector3 get_foot_acc_ref () const { return lcg.get_foot_acc_ref(); };
     void get_leg_default_translate_pos (std::vector<hrp::Vector3>& off) const { off = footstep_param.leg_default_translate_pos; };
     size_t get_overwritable_footstep_index_offset () const { return overwritable_footstep_index_offset; };

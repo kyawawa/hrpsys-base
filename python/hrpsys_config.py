@@ -881,6 +881,7 @@ class HrpsysConfigurator(object):
             self.connectLoggerPort(self.abc, 'controlSwingSupportTime')
             self.connectLoggerPort(self.abc, 'cogOut')
             self.connectLoggerPort(self.abc, 'refZmp')
+            self.connectLoggerPort(self.abc, 'footPosRef')
             self.connectLoggerPort(self.abc, 'footAccRef')
         if self.st != None:
             self.connectLoggerPort(self.st, 'zmp')

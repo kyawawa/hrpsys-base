@@ -79,6 +79,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_controlSwingSupportTimeOut("controlSwingSupportTime", m_controlSwingSupportTime),
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
+      m_footPosRefOut("footPosRef", m_footPosRef),
       m_footAccRefOut("footAccRef", m_footAccRef),
       m_cogOut("cogOut", m_cog),
       m_refZmpOut("refZmp", m_refZmp),
@@ -134,6 +135,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("refZmp", m_refZmpOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
+    addOutPort("footPosRef", m_footPosRefOut);
     addOutPort("footAccRef", m_footAccRefOut);
 
     // Set service provider to Ports
@@ -634,6 +636,11 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_sbpCogOffset.data.y = sbp_cog_offset(1);
       m_sbpCogOffset.data.z = sbp_cog_offset(2);
       m_sbpCogOffset.tm = m_qRef.tm;
+      // reference foot pos
+      m_footPosRef.data.x = foot_pos_ref(0);
+      m_footPosRef.data.y = foot_pos_ref(1);
+      m_footPosRef.data.z = foot_pos_ref(2);
+      m_footPosRef.tm = m_qRef.tm;
       // reference foot acc
       m_footAccRef.data.x = foot_acc_ref(0);
       m_footAccRef.data.y = foot_acc_ref(1);
@@ -648,6 +655,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     m_cogOut.write();
     m_refZmpOut.write();
     m_sbpCogOffsetOut.write();
+    m_footPosRefOut.write();
     m_footAccRefOut.write();
 
     // reference acceleration
@@ -738,6 +746,7 @@ void AutoBalancer::getTargetParameters()
     if ( gg_is_walking ) {
       gg->set_default_zmp_offsets(default_zmp_offsets);
       gg_solved = gg->proc_one_tick(act_contact_states);
+      foot_pos_ref = gg->get_foot_pos_ref();
       foot_acc_ref = gg->get_foot_acc_ref();
       {
           std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
@@ -823,6 +832,7 @@ void AutoBalancer::getTargetParameters()
           }
       }
     } else {
+      foot_acc_ref = hrp::Vector3::Zero();
       tmp_fix_coords = fix_leg_coords;
       // double support by default
       {

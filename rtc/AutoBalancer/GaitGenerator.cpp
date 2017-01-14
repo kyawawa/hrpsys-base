@@ -400,6 +400,7 @@ namespace rats
   {
       mid_coords(ret, swing_rot_ratio, start, goal);
       dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type);
+      foot_pos = dhtg[swing_trajectory_generator_idx].get_pos();
       foot_acc = dhtg[swing_trajectory_generator_idx].get_acc();
   };
 

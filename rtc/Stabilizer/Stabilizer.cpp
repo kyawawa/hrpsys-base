@@ -71,6 +71,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_pgainCurrentIn("pgainCurrent", m_pgainCurrent),
     m_dgainCurrentIn("dgainCurrent", m_dgainCurrent),
     m_footAccRefIn("footAccRef", m_footAccRef),
+    m_swingRatioIn("swingRatio", m_swingRatio),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -146,6 +147,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("pgainCurrent", m_pgainCurrentIn);
   addInPort("dgainCurrent", m_dgainCurrentIn);
   addInPort("footAccRef", m_footAccRefIn);
+  addInPort("swingRatio", m_swingRatioIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -454,7 +456,10 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   servo_pgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
   servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
   gain_control_time_const = 0.4;
+  gain_control_time_ratio[0] = 0.7; // swing ratio to start increasing servo gain
+  gain_control_time_ratio[1] = 0.9; // swing ratio to finish increasing servo gain
   foot_acc_ref = hrp::Vector3::Zero();
+  swing_ratio = 0.0;
   swing_collision_offset.resize(2, 0.1);
   swing_time = 0;
   remain_swing_time = 0;
@@ -713,6 +718,10 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       foot_acc_ref(0) = m_footAccRef.data.x;
       foot_acc_ref(1) = m_footAccRef.data.y;
       foot_acc_ref(2) = m_footAccRef.data.z;
+  }
+  if (m_swingRatioIn.isNew()) {
+      m_swingRatioIn.read();
+      swing_ratio = m_swingRatio.data;
   }
 
   if (is_legged_robot) {
@@ -1942,34 +1951,33 @@ void Stabilizer::limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& e
 void Stabilizer::gainControl(const double T)
 {
     double remain_swing_time = m_controlSwingSupportTime.data[0];
-    STIKParam next_swing_ikp = stikp[0];
     size_t swing_joint_num = jpe_v[0]->numJoints();
+    int swing_ikp_idx = 0;
     bool is_swing_contact = isContact(0);
-    for (size_t i = 1; i < stikp.size(); i++) {
+    for (size_t i = 1; i < stikp.size(); i++) { // 遊脚期のみ考える現在はこの必要はない
         if (m_controlSwingSupportTime.data[i] < remain_swing_time) { // 小さいほうが次の遊脚 or 現在の遊脚
             remain_swing_time = m_controlSwingSupportTime.data[i];
-            next_swing_ikp = stikp[i];
+            swing_ikp_idx = i;
             swing_joint_num = jpe_v[i]->numJoints();
             is_swing_contact = isContact(i);
         }
     }
-    if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
-         || (isContact(0) && isContact(1)) ) { // Actual : double support phase
-        servo_pgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_pgain_percentage) / ((remain_swing_time) / dt); // need offset ?
-        servo_dgain_percentage += (100 * hrp::dvector::Ones(m_robot->numJoints()) - servo_dgain_percentage) / ((remain_swing_time) / dt);
-        // for (size_t i = 0; i < m_robot->numJoints(); ++i) {
-        //     m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
-        //     m_robot->joint(i)->q += -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q) * dt;
-        // }
-        // if (servo_pgain_percentage[i] < 100 || servo_dgain_percentage[i] < 100) {
-        //     m_robot->joint(i)->dq = -1/T * (m_qCurrent.data[i] - m_robot->joint(i)->q);
-        //     m_robot->joint(i)->q = m_qCurrent.data[i] + m_robot->joint(i)->dq * dt;
-        // }
-    } else if (!is_swing_contact) {
-        hrp::Link* link = m_robot->link(next_swing_ikp.target_name);
-        for (int i = swing_joint_num - 1; i >= 0; --i, link = link->parent) {
-            servo_pgain_percentage[link->jointId] = next_swing_ikp.swing_servo_pgain_percentage(i);
-            servo_dgain_percentage[link->jointId] = next_swing_ikp.swing_servo_dgain_percentage(i);
+    if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) { // Reference : not double support phase
+        if (swing_ratio <= gain_control_time_ratio[0]) {
+            if (!is_swing_contact) {
+                for (int i = 0; i < swing_joint_num; ++i) {
+                    servo_pgain_percentage[jpe_v[swing_ikp_idx]->joint(i)->jointId] = stikp[swing_ikp_idx].swing_servo_pgain_percentage(i);
+                    servo_dgain_percentage[jpe_v[swing_ikp_idx]->joint(i)->jointId] = stikp[swing_ikp_idx].swing_servo_dgain_percentage(i);
+                }
+            }
+        } else if (swing_ratio <= gain_control_time_ratio[1]) {
+            servo_pgain_percentage.segment(jpe_v[swing_ikp_idx]->joint(0)->jointId, swing_joint_num) = stikp[swing_ikp_idx].swing_servo_pgain_percentage +
+                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_ikp_idx].swing_servo_pgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
+            servo_dgain_percentage.segment(jpe_v[swing_ikp_idx]->joint(0)->jointId, swing_joint_num) = stikp[swing_ikp_idx].swing_servo_dgain_percentage +
+                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_ikp_idx].swing_servo_dgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
+        } else {
+            servo_pgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
+            servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
         }
     }
 }
@@ -2128,6 +2136,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.cp_offset[i] = cp_offset(i);
     i_stp.swing_collision_offset[i] = swing_collision_offset[i];
     i_stp.early_land_offset[i] = early_land_offset[i];
+    i_stp.gain_control_time_ratio[i] = gain_control_time_ratio[i];
   }
   i_stp.eefm_pos_time_const_support.length(stikp.size());
   i_stp.eefm_pos_damping_gain.length(stikp.size());
@@ -2466,6 +2475,14 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   }
   use_servo_gain_control = i_stp.use_servo_gain_control;
   gain_control_time_const = i_stp.gain_control_time_const;
+  if (i_stp.gain_control_time_ratio[0] < i_stp.gain_control_time_ratio[1]
+      && i_stp.gain_control_time_ratio[0] > 0.0 && i_stp.gain_control_time_ratio[1] <= 1.0) {
+      for (size_t i = 0; i < 2; ++i) {
+          gain_control_time_ratio[i] = i_stp.gain_control_time_ratio[i];
+      }
+  } else {
+      std::cerr << "[" << m_profile.instance_name << "] cannot change: must be 0.0 < gain_control_time_ratio[0] < gain_control_time_ratio[1] <= 1.0" << std::endl;
+  }
   sync_to_air_max_counter = static_cast<int>(i_stp.sync_to_air_max_time / dt);
   if (control_mode == MODE_IDLE) {
       for (size_t i = 0; i < i_stp.end_effector_list.length(); i++) {

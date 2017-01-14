@@ -81,6 +81,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
       m_footPosRefOut("footPosRef", m_footPosRef),
       m_footAccRefOut("footAccRef", m_footAccRef),
+      m_swingRatioOut("swingRatio", m_swingRatio),
       m_cogOut("cogOut", m_cog),
       m_refZmpOut("refZmp", m_refZmp),
       m_AutoBalancerServicePort("AutoBalancerService"),
@@ -137,6 +138,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
     addOutPort("footPosRef", m_footPosRefOut);
     addOutPort("footAccRef", m_footAccRefOut);
+    addOutPort("swingRatio", m_swingRatioOut);
 
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
@@ -308,6 +310,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     gg_is_walking = gg_solved = false;
     m_walkingStates.data = false;
     fix_leg_coords = coordinates();
+    foot_pos_ref = hrp::Vector3::Zero();
+    foot_acc_ref = hrp::Vector3::Zero();
+    swing_ratio = 0.0;
 
     // load virtual force sensors
     readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
@@ -646,6 +651,9 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_footAccRef.data.y = foot_acc_ref(1);
       m_footAccRef.data.z = foot_acc_ref(2);
       m_footAccRef.tm = m_qRef.tm;
+      // reference remain swing ratio
+      m_swingRatio.data = swing_ratio;
+      m_swingRatio.tm = m_qRef.tm;
     }
     m_basePosOut.write();
     m_baseRpyOut.write();
@@ -657,6 +665,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     m_sbpCogOffsetOut.write();
     m_footPosRefOut.write();
     m_footAccRefOut.write();
+    m_swingRatioOut.write();
 
     // reference acceleration
     hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
@@ -748,6 +757,7 @@ void AutoBalancer::getTargetParameters()
       gg_solved = gg->proc_one_tick(act_contact_states);
       foot_pos_ref = gg->get_foot_pos_ref();
       foot_acc_ref = gg->get_foot_acc_ref();
+      swing_ratio = gg->get_swing_ratio();
       {
           std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
           coordinates tmpc;

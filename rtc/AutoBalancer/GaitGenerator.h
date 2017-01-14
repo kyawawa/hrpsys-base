@@ -1104,6 +1104,7 @@ namespace rats
       void set_tmp_goal(const coordinates &_tmp_goal) {tmp_goal = _tmp_goal;};
       void set_lcg_count (size_t c) { lcg_count = c; };
       double get_current_swing_time(const size_t idx) const { return current_swing_time.at(idx); };
+      double get_swing_ratio() const { return swing_ratio; };
       const std::vector<step_node>& get_swing_leg_steps() const { return swing_leg_steps; };
       const std::vector<step_node>& get_support_leg_steps() const { return support_leg_steps; };
       const std::vector<step_node>& get_swing_leg_src_steps() const { return swing_leg_src_steps; };
@@ -1625,6 +1626,7 @@ namespace rats
     size_t get_lcg_count() const { return lcg.get_lcg_count(); };
     void set_lcg_count (size_t c) { lcg.set_lcg_count(c); };
     double get_current_swing_time(const size_t idx) const { return lcg.get_current_swing_time(idx); };
+    double get_swing_ratio() const { return lcg.get_swing_ratio(); };
     std::vector<leg_type> get_current_support_states() const { return lcg.get_current_support_states();};
     double get_default_step_time () const { return default_step_time; };
     double get_default_step_height () const { return lcg.get_default_step_height(); };

@@ -181,6 +181,8 @@ class AutoBalancer
   OutPort<TimedPoint3D> m_footPosRefOut;
   TimedPoint3D m_footAccRef;
   OutPort<TimedPoint3D> m_footAccRefOut;
+  TimedDouble m_swingRatio;
+  OutPort<TimedDouble> m_swingRatioOut;
   std::vector<TimedDoubleSeq> m_force;
   std::vector<OutPort<TimedDoubleSeq> *> m_ref_forceOut;
   std::vector<TimedPoint3D> m_limbCOPOffset;
@@ -250,6 +252,7 @@ class AutoBalancer
   ggPtr gg;
   bool gg_is_walking, gg_solved;
   hrp::Vector3 foot_pos_ref, foot_acc_ref;
+  double swing_ratio;
   // for abc
   hrp::Vector3 ref_cog, ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
   enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;

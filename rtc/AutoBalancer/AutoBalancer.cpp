@@ -1641,7 +1641,7 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   } else if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::CIRCLE) {
     gg->set_stride_limitation_type(CIRCLE);
   }
-
+  gg->set_swing_leg_regenerate_type(i_param.swing_leg_regenerate_type);
   // print
   gg->print_param(std::string(m_profile.instance_name));
   return true;
@@ -1736,6 +1736,7 @@ bool AutoBalancer::getGaitGeneratorParam(OpenHRP::AutoBalancerService::GaitGener
   } else if (gg->get_stride_limitation_type() == CIRCLE) {
     i_param.stride_limitation_type = OpenHRP::AutoBalancerService::CIRCLE;
   }
+  i_param.swing_leg_regenerate_type = gg->get_swing_leg_regenerate_type();
   return true;
 };
 

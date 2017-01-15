@@ -1250,6 +1250,7 @@ namespace rats
     double leg_margin[4], stride_limitation_for_circle_type[4], overwritable_stride_limitation[4], footstep_modification_gain[2], cp_check_margin[2];
     bool use_stride_limitation, is_emergency_walking[2], modify_footsteps, is_cp_outside;
     stride_limitation_type default_stride_limitation_type;
+    size_t swing_leg_regenerate_type;
 
     /* preview controller parameters */
     //preview_dynamics_filter<preview_control>* preview_controller_ptr;
@@ -1297,7 +1298,7 @@ namespace rats
         finalize_count(0), optional_go_pos_finalize_footstep_num(0), overwrite_footstep_index(0), overwritable_footstep_index_offset(1),
         velocity_mode_flg(VEL_IDLING), emergency_flg(IDLING),
         use_inside_step_limitation(true), use_stride_limitation(false), modify_footsteps(false), default_stride_limitation_type(SQUARE), is_cp_outside(false),
-        preview_controller_ptr(NULL) {
+        preview_controller_ptr(NULL), swing_leg_regenerate_type(0) {
         swing_foot_zmp_offsets = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         prev_que_sfzos = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         leg_type_map = boost::assign::map_list_of<leg_type, std::string>(RLEG, "rleg")(LLEG, "lleg")(RARM, "rarm")(LARM, "larm");
@@ -1524,6 +1525,15 @@ namespace rats
             return false;
         }
     };
+    bool set_swing_leg_regenerate_type (const size_t idx)
+    {
+        if (idx < 2) {
+            swing_leg_regenerate_type = idx;
+            return true;
+        } else {
+            return false;
+        }
+    }
     bool get_footstep_nodes_by_index (std::vector<step_node>& csl, const size_t idx) const
     {
         if (footstep_nodes_list.size()-1 >= idx) {
@@ -1686,6 +1696,7 @@ namespace rats
     stride_limitation_type get_stride_limitation_type () const { return default_stride_limitation_type; };
     double get_toe_check_thre () const { return thtc.get_toe_check_thre(); };
     double get_heel_check_thre () const { return thtc.get_heel_check_thre(); };
+    size_t get_swing_leg_regenerate_type () const { return swing_leg_regenerate_type; };
     void print_param (const std::string& print_str = "") const
     {
         double stride_fwd_x, stride_y, stride_th, stride_bwd_x;

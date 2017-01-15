@@ -255,6 +255,8 @@ module OpenHRP
       boolean modify_footsteps;
       /// CP check margin when modifying footsteps (x, y) [m]
       DblArray2 cp_check_margin;
+      /// How to regenerate swinging leg trajectory
+      long swing_leg_regenerate_type;
     };
 
     /**

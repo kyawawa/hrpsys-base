@@ -661,17 +661,18 @@ namespace rats
         //     lcg.set_tmp_goal(tmp_goal);
         //     emergency_flg = STOPPING;
         // }
-    } else if (emergency_flg == EARLY_LANDING) {
-        overwrite_footstep_nodes_list.resize(footstep_nodes_list.size() - lcg.get_footstep_index());
-        overwrite_footstep_nodes_list[0] = get_swing_leg_steps();
-        std::copy(footstep_nodes_list.begin() + lcg.get_footstep_index() + 1,
-                  footstep_nodes_list.end(),
-                  overwrite_footstep_nodes_list.begin() + 1);
-        overwrite_refzmp_queue(overwrite_footstep_nodes_list);
-        overwrite_footstep_nodes_list.clear();
-        print_footstep_nodes_list();
-        emergency_flg = IDLING;
-    } else if ( lcg.get_lcg_count() == get_overwrite_check_timing() ) {
+    } // else if (emergency_flg == EARLY_LANDING) {
+      //   overwrite_footstep_nodes_list.resize(footstep_nodes_list.size() - lcg.get_footstep_index());
+      //   overwrite_footstep_nodes_list[0] = get_swing_leg_steps();
+      //   std::copy(footstep_nodes_list.begin() + lcg.get_footstep_index() + 1,
+      //             footstep_nodes_list.end(),
+      //             overwrite_footstep_nodes_list.begin() + 1);
+      //   overwrite_refzmp_queue(overwrite_footstep_nodes_list);
+      //   overwrite_footstep_nodes_list.clear();
+      //   print_footstep_nodes_list();
+      //   emergency_flg = IDLING;
+    // }
+    else if ( lcg.get_lcg_count() == get_overwrite_check_timing() ) {
       if (velocity_mode_flg != VEL_IDLING && lcg.get_footstep_index() > 0) {
         std::vector< std::vector<step_node> > cv;
         calc_next_coords_velocity_mode(cv, get_overwritable_index(),

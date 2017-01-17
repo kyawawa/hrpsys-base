@@ -399,7 +399,7 @@ namespace rats
                                             const orbit_type current_orbit_type)
   {
       mid_coords(ret, swing_rot_ratio, start, goal);
-      dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type);
+      dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type, default_way_point_offset);
       foot_pos = dhtg[swing_trajectory_generator_idx].get_pos();
       foot_acc = dhtg[swing_trajectory_generator_idx].get_acc();
   };
@@ -608,8 +608,11 @@ namespace rats
                 first_step_time = default_step_time;
             } else {
                 int rl = cur_leg == RLEG ? -1 : 1;
-                if (swing_leg_regenerate_type == 1 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
+                if (swing_leg_regenerate_type == 2) {
+                }
+                else if (swing_leg_regenerate_type == 1 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
                     if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02;
+                    set_stair_trajectory_way_point_offset(hrp::Vector3(0.06, 0.0, 0.0));
                     set_default_orbit_type(STAIR);
                 } // else if (swing_leg_regenerate_type == 0) {
                 else {

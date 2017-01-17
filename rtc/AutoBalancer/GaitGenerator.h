@@ -456,7 +456,7 @@ namespace rats
           set_swing_trajectory_final_distance_weight(_final_distance_weight);
           set_swing_trajectory_time_offset_xy2z(_time_offset_xy2z);
       };
-      void get_trajectory_point (hrp::Vector3& ret, const hrp::Vector3& start, const hrp::Vector3& goal, const double height, const orbit_type current_orbit_type)
+      void get_trajectory_point (hrp::Vector3& ret, const hrp::Vector3& start, const hrp::Vector3& goal, const double height, const orbit_type current_orbit_type, hrp::Vector3 _way_point_offset)
       {
           if (current_count == 0) {
               switch(current_orbit_type) {
@@ -464,7 +464,7 @@ namespace rats
                   generate_rectangle_trajectory(start, goal, height);
                   break;
               case STAIR:
-                  generate_stair_trajectory(start, goal, height, way_point_offset);
+                  generate_stair_trajectory(start, goal, height, _way_point_offset);
                   break;
               case CYCLOIDDELAY:
                   generate_cycloid_trajectory(start, goal, height);
@@ -596,13 +596,13 @@ namespace rats
         path.push_back(start);
         // currently way_point_offset(1) is not used.
         //if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > _way_point_offset(2) ) {
-        if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > 0.0) {
+        if ( diff_vec.norm() > 1e-4 && (goal(2) - start(2)) > 1e-6) {
           path.push_back(hrp::Vector3(start+-1*_way_point_offset(0)*diff_vec.normalized()+hrp::Vector3(0,0,_way_point_offset(2)+max_height-start(2))));
         }
         path.push_back(hrp::Vector3(start(0), start(1), max_height));
         path.push_back(hrp::Vector3(goal(0), goal(1), max_height));
         //if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > _way_point_offset(2) ) {
-        if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > 0.0) {
+        if ( diff_vec.norm() > 1e-4 && (start(2) - goal(2)) > 1e-6) {
           path.push_back(hrp::Vector3(goal+_way_point_offset(0)*diff_vec.normalized()+hrp::Vector3(0,0,_way_point_offset(2)+max_height-goal(2))));
         }
         // if (height > 20 * 1e-3) {
@@ -823,6 +823,7 @@ namespace rats
       coordinates tmp_start, tmp_goal;
       coordinates prev_mid_coords_to_dst;
       hrp::Vector3 foot_pos, foot_acc;
+      hrp::Vector3 default_way_point_offset;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -866,6 +867,7 @@ namespace rats
         crdtg.set_dt(dt);
         foot_pos = hrp::Vector3::Zero();
         foot_acc = hrp::Vector3::Zero();
+        default_way_point_offset = hrp::Vector3(0.3, 0.0, 0.0);
         if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt);
         if (swing_foot_rot_ratio_interpolator == NULL) swing_foot_rot_ratio_interpolator = new interpolator(1, dt);
         //if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt, interpolator::LINEAR);
@@ -913,7 +915,8 @@ namespace rats
         crdtg.set_swing_trajectory_time_offset_xy2z(_tmp);
         time_offset_xy2z = _tmp;
       };
-      void set_stair_trajectory_way_point_offset (const hrp::Vector3 _offset) { sdtg.set_stair_trajectory_way_point_offset(_offset); };
+      // void set_stair_trajectory_way_point_offset (const hrp::Vector3 _offset) { dhtg.front().set_stair_trajectory_way_point_offset(_offset); };
+      void set_stair_trajectory_way_point_offset (const hrp::Vector3 _offset) { default_way_point_offset = _offset; };
       void set_cycloid_delay_kick_point_offset (const hrp::Vector3 _offset) { cdktg.set_cycloid_delay_kick_point_offset(_offset); };
       void set_toe_pos_offset_x (const double _offx) { toe_pos_offset_x = _offx; };
       void set_heel_pos_offset_x (const double _offx) { heel_pos_offset_x = _offx; };
@@ -1179,7 +1182,7 @@ namespace rats
       double get_swing_trajectory_time_offset_xy2z () const { return time_offset_xy2z; };
       hrp::Vector3 get_foot_pos_ref () const { return foot_pos; };
       hrp::Vector3 get_foot_acc_ref () const { return foot_acc; };
-      hrp::Vector3 get_stair_trajectory_way_point_offset () const { return sdtg.get_stair_trajectory_way_point_offset(); };
+      hrp::Vector3 get_stair_trajectory_way_point_offset () const { return default_way_point_offset; };
       hrp::Vector3 get_cycloid_delay_kick_point_offset () const { return cdktg.get_cycloid_delay_kick_point_offset() ; };
       double get_toe_pos_offset_x () const { return toe_pos_offset_x; };
       double get_heel_pos_offset_x () const { return heel_pos_offset_x; };

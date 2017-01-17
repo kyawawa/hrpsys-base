@@ -1591,7 +1591,7 @@ void Stabilizer::calcStateForEmergencySignal()
   }
   // foot collision Check
   int is_foot_collided = 0;
-  if (is_walking) {
+  if (is_walking && control_mode == MODE_ST) {
       // if (isContact(contact_states_index_map["rleg"])) swing_leg = "lleg";
       // else if (isContact(contact_states_index_map["lleg"])) swing_leg = "rleg";
       // Reference or Actual swinging phase

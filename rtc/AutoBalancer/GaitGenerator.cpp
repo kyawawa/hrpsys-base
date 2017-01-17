@@ -608,7 +608,7 @@ namespace rats
                 first_step_time = default_step_time;
             } else {
                 int rl = cur_leg == RLEG ? -1 : 1;
-                if (swing_leg_regenerate_type == 1 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2]) {
+                if (swing_leg_regenerate_type == 1 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
                     if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02;
                     set_default_orbit_type(STAIR);
                 } // else if (swing_leg_regenerate_type == 0) {

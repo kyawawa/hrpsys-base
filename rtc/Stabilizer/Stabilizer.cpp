@@ -1616,21 +1616,27 @@ void Stabilizer::calcStateForEmergencySignal()
               early_landing = false;
           }
           remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
+          static bool not_internal_force = true;
           if (!early_landing) {
               double remain_swing_time = m_controlSwingSupportTime.data[swing_leg];
               if ((swing_time - remain_swing_time) > swing_collision_offset[0] && remain_swing_time > swing_collision_offset[1]) { // ignore the beginning and the end of swinging phase
                   // if (prev_act_force[swing_leg].segment(0, 2).norm() > swing_collision_threshold) { // todo
                   // if (std::fabs(m_wrenches[swing_leg].data[swing_collision_direction]) > swing_collision_threshold) {
                   if (std::fabs(prev_act_force[swing_leg](swing_collision_direction)) > swing_collision_threshold) {
-                      ++is_foot_collided;
-                      std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
-                      Eigen::Vector2d tmp_cp;
-                      for (size_t i = 0; i < 2; i++) {
-                          tmp_cp(i) = act_cp(i);
+                      if (not_internal_force) {
+                          ++is_foot_collided;
+                          std::cerr << "[" << m_profile.instance_name << "] Detect over " << swing_collision_threshold << " at m_wrenches.data[" << swing_collision_direction << "]" <<  std::endl;
+                          Eigen::Vector2d tmp_cp;
+                          for (size_t i = 0; i < 2; i++) {
+                              tmp_cp(i) = act_cp(i);
+                          }
+                          // is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
+                          // if (is_cp_outside) ++is_foot_collided;
+                          if (is_cp_outside_while_walking) ++is_foot_collided;
+                          not_internal_force = false;
+                      } else {
+                          not_internal_force = true;
                       }
-                      // is_cp_outside = !szd->is_inside_support_polygon(tmp_cp, rel_ee_pos, rel_ee_rot, rel_ee_name, support_leg, cp_check_margin, - sbp_cog_offset); // static balance point
-                      // if (is_cp_outside) ++is_foot_collided;
-                      if (is_cp_outside_while_walking) ++is_foot_collided;
                   }
               }
               // ignore the beginning and the end of swinging phase

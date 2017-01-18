@@ -399,7 +399,7 @@ namespace rats
                                             const orbit_type current_orbit_type)
   {
       mid_coords(ret, swing_rot_ratio, start, goal);
-      dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type, default_way_point_offset);
+      dhtg[swing_trajectory_generator_idx].get_trajectory_point(ret.pos, hrp::Vector3(start.pos), hrp::Vector3(goal.pos), height, current_orbit_type, default_way_point_offset, stair_point, default_stair_goal_offset);
       foot_pos = dhtg[swing_trajectory_generator_idx].get_pos();
       foot_acc = dhtg[swing_trajectory_generator_idx].get_acc();
   };
@@ -588,6 +588,9 @@ namespace rats
   bool gait_generator::proc_one_tick (const std::vector<bool>& contact_states)
   {
     solved = false;
+    orbit_type current_orbit_type = get_default_orbit_type();
+    hrp::Vector3 curent_stair_trajectory_way_point_offset = get_stair_trajectory_way_point_offset();
+    hrp::Vector3 ref_stair_point = get_stair_point();
 
     /* update refzmp */
     if (emergency_flg == EMERGENCY_STOP) { // && lcg.get_footstep_index() > 0) { // 遊脚再生成未対応
@@ -608,12 +611,12 @@ namespace rats
                 first_step_time = default_step_time;
             } else {
                 int rl = cur_leg == RLEG ? -1 : 1;
-                if (swing_leg_regenerate_type == 2) {
-                }
-                else if (swing_leg_regenerate_type == 1 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
-                    if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02;
+                if (swing_leg_regenerate_type == 1 || swing_leg_regenerate_type == 2 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
+                    // if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02; // tmp comment out
                     set_stair_trajectory_way_point_offset(hrp::Vector3(0.06, 0.0, 0.0));
                     set_default_orbit_type(STAIR);
+                    ref_stair_point(0) = get_swing_leg_steps()[0].worldcoords.pos[0];
+                    set_stair_point(ref_stair_point);
                 } // else if (swing_leg_regenerate_type == 0) {
                 else {
                     tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.1;
@@ -622,9 +625,18 @@ namespace rats
                 }
                 first_step_time = default_step_time;
             }
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0)));
-            overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
-            // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            if (swing_leg_regenerate_type == 2) { // continue walking
+                overwrite_footstep_nodes_list.resize(footstep_nodes_list.size() - lcg.get_footstep_index());
+                overwrite_footstep_nodes_list[0] = boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0));
+                std::copy(footstep_nodes_list.begin() + lcg.get_footstep_index() + 1,
+                          footstep_nodes_list.end(),
+                          overwrite_footstep_nodes_list.begin() + 1);
+            } else { // stop walking
+                overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0)));
+                overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
+                // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+            }
+
             set_foot_emergency(true);
             coordinates tmp_start = get_swing_leg_steps()[0].worldcoords;
             coordinates tmp_goal = overwrite_footstep_nodes_list[0].front().worldcoords;
@@ -647,7 +659,8 @@ namespace rats
 
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);
         overwrite_footstep_nodes_list.clear();
-        emergency_flg = STOPPING;
+        if (swing_leg_regenerate_type != 2) emergency_flg = STOPPING;
+        else emergency_flg = IDLING;
         is_cp_outside = false;
         print_footstep_nodes_list();
         //  else {
@@ -798,6 +811,8 @@ namespace rats
     /* update swing_leg_coords, support_leg_coords */
     if ( solved ) {
       lcg.update_leg_steps(footstep_nodes_list, lcg.get_cur_double_support_ratio_swing_before(), default_double_support_ratio_swing_after, thtc);
+      set_default_orbit_type(current_orbit_type);
+      set_stair_trajectory_way_point_offset(curent_stair_trajectory_way_point_offset);
     } else if (finalize_count>0) {
       lcg.clear_interpolators();
     }

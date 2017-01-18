@@ -642,7 +642,7 @@ namespace rats
             // lcg.reset(static_cast<size_t>(default_double_support_ratio_before * one_step_len), static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), footstep_nodes_list[lcg.get_footstep_index()], footstep_nodes_list[lcg.get_footstep_index() - 1], default_double_support_ratio_before, default_double_support_ratio_after);
             lcg.reset(one_step_len, static_cast<size_t>(overwrite_footstep_nodes_list.at(1).front().step_time / dt), overwrite_footstep_nodes_list.front(), tmp_swing_leg_src_steps, get_support_leg_steps(), default_double_support_ratio_before, default_double_support_ratio_after);
             // lcg.set_lcg_count(static_cast<size_t>(one_step_len * (1 - default_double_support_ratio_before))); // 歩き始めを検知するために，やはりdefault_double_support_ratio_beforeを0にすべき？
-            lcg.set_cur_double_support_ratio_swing_before(0.002); // todo: どっかで0除算が起こっていそう
+            lcg.set_cur_double_support_ratio_swing_before(0.0);
         }
 
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);

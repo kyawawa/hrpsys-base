@@ -1634,9 +1634,9 @@ void Stabilizer::calcStateForEmergencySignal()
                           // if (is_cp_outside) ++is_foot_collided;
                           if (is_cp_outside_while_walking) ++is_foot_collided;
                           not_internal_force = false;
-                      } else {
-                          not_internal_force = true;
                       }
+                  }  else {
+                      not_internal_force = true;
                   }
               }
               // ignore the beginning and the end of swinging phase

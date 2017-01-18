@@ -615,7 +615,7 @@ namespace rats
                     // if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2]) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02; // tmp comment out
                     set_stair_trajectory_way_point_offset(hrp::Vector3(0.06, 0.0, 0.0));
                     set_default_orbit_type(STAIR);
-                    ref_stair_point(0) = get_swing_leg_steps()[0].worldcoords.pos[0];
+                    ref_stair_point(0) = get_swing_leg_steps()[0].worldcoords.pos[0] - get_support_leg_steps().front().worldcoords.pos[0];
                     set_stair_point(ref_stair_point);
                 } // else if (swing_leg_regenerate_type == 0) {
                 else {

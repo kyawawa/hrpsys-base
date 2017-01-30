@@ -1957,31 +1957,33 @@ void Stabilizer::limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& e
 
 void Stabilizer::gainControl(const double T)
 {
-    double remain_swing_time = m_controlSwingSupportTime.data[0];
-    size_t swing_joint_num = jpe_v[0]->numJoints();
-    int swing_ikp_idx = 0;
-    bool is_swing_contact = isContact(0);
-    for (size_t i = 1; i < stikp.size(); i++) { // 遊脚期のみ考える現在はこの必要はない
-        if (m_controlSwingSupportTime.data[i] < remain_swing_time) { // 小さいほうが次の遊脚 or 現在の遊脚
-            remain_swing_time = m_controlSwingSupportTime.data[i];
-            swing_ikp_idx = i;
-            swing_joint_num = jpe_v[i]->numJoints();
-            is_swing_contact = isContact(i);
-        }
-    }
+    // double remain_swing_time = m_controlSwingSupportTime.data[0];
+    // size_t swing_joint_num = jpe_v[0]->numJoints();
+    // int swing_ikp_idx = 0;
+    // bool is_swing_contact = isContact(0);
+    // for (size_t i = 1; i < stikp.size(); i++) { // 遊脚期のみ考える現在はこの必要はない
+    //     if (m_controlSwingSupportTime.data[i] < remain_swing_time) { // 小さいほうが次の遊脚 or 現在の遊脚
+    //         remain_swing_time = m_controlSwingSupportTime.data[i];
+    //         swing_ikp_idx = i;
+    //         swing_joint_num = jpe_v[i]->numJoints();
+    //         is_swing_contact = isContact(i);
+    //     }
+    // }
     if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) { // Reference : not double support phase
+        int swing_index = contact_states[contact_states_index_map["rleg"]] == 0 ? contact_states[contact_states_index_map["lleg"]] : contact_states[contact_states_index_map["rleg"]];
+        int swing_joint_num = jpe_v[swing_index]->numJoints();
         if (swing_ratio <= gain_control_time_ratio[0]) {
-            if (!is_swing_contact) {
+            if (!isContact(swing_index)) {
                 for (int i = 0; i < swing_joint_num; ++i) {
-                    servo_pgain_percentage[jpe_v[swing_ikp_idx]->joint(i)->jointId] = stikp[swing_ikp_idx].swing_servo_pgain_percentage(i);
-                    servo_dgain_percentage[jpe_v[swing_ikp_idx]->joint(i)->jointId] = stikp[swing_ikp_idx].swing_servo_dgain_percentage(i);
+                    servo_pgain_percentage[jpe_v[swing_index]->joint(i)->jointId] = stikp[swing_index].swing_servo_pgain_percentage(i);
+                    servo_dgain_percentage[jpe_v[swing_index]->joint(i)->jointId] = stikp[swing_index].swing_servo_dgain_percentage(i);
                 }
             }
         } else if (swing_ratio <= gain_control_time_ratio[1]) {
-            servo_pgain_percentage.segment(jpe_v[swing_ikp_idx]->joint(0)->jointId, swing_joint_num) = stikp[swing_ikp_idx].swing_servo_pgain_percentage +
-                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_ikp_idx].swing_servo_pgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
-            servo_dgain_percentage.segment(jpe_v[swing_ikp_idx]->joint(0)->jointId, swing_joint_num) = stikp[swing_ikp_idx].swing_servo_dgain_percentage +
-                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_ikp_idx].swing_servo_dgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
+            servo_pgain_percentage.segment(jpe_v[swing_index]->joint(0)->jointId, swing_joint_num) = stikp[swing_index].swing_servo_pgain_percentage +
+                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_index].swing_servo_pgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
+            servo_dgain_percentage.segment(jpe_v[swing_index]->joint(0)->jointId, swing_joint_num) = stikp[swing_index].swing_servo_dgain_percentage +
+                (100 * hrp::dvector::Ones(swing_joint_num) - stikp[swing_index].swing_servo_dgain_percentage) * (swing_ratio - gain_control_time_ratio[0]) / (gain_control_time_ratio[1] - gain_control_time_ratio[0]);
         } else {
             servo_pgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());
             servo_dgain_percentage = 100 * hrp::dvector::Ones(m_robot->numJoints());

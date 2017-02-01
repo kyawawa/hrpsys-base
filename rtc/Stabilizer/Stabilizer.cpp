@@ -1970,7 +1970,7 @@ void Stabilizer::gainControl(const double T)
     //     }
     // }
     if (!(contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]])) { // Reference : not double support phase
-        int swing_index = contact_states[contact_states_index_map["rleg"]] == 0 ? contact_states[contact_states_index_map["lleg"]] : contact_states[contact_states_index_map["rleg"]];
+        int swing_index = contact_states[contact_states_index_map["rleg"]] == 0 ? contact_states_index_map["rleg"] : contact_states_index_map["lleg"];
         int swing_joint_num = jpe_v[swing_index]->numJoints();
         if (swing_ratio <= gain_control_time_ratio[0]) {
             if (!isContact(swing_index)) {

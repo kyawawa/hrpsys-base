@@ -62,6 +62,35 @@ namespace rats
       }
   };
 
+  double calc_land_t(const hrp::Vector3& cog, const hrp::Vector3& cog_vel, const hrp::Vector3& rel_swing_pos, const double G, const double y_offset, const double L)
+  {
+      double t = 0.1;
+      double alpha = 0.001;
+      double epsilon = 0.01;
+      double grad, etw;
+      double omega = std::sqrt(G / cog(2));
+      std::vector<double> XY(2);
+      for (size_t i = 0; i < 2; ++i) {
+          XY[i] = (cog(i) * omega + cog_vel(i)) / omega;
+      }
+      // dont use y_offset
+      double t_max = log(4 * (L * L - cog(2) * cog(2)) / (XY[0] * XY[0] + XY[1] * XY[1])) / (2 * omega);
+      // double t_max = log(y_offset * (XY[0] + XY[1]) + std::sqrt(2 * y_offset * y_offset * XY[0] * XY[1] + 4 * (XY[0] * XY[0] + XY[1] * XY[1]) * (L * L - cog(2) * cog(2))) / (XY[0] * XY[0] + XY[1] * XY[1]));
+      std::cerr << "t_max: " << t_max << std::endl;
+      do {
+          grad = 0;
+          etw = exp(t * omega);
+          for (size_t i = 0; i < 2; ++i) {
+              grad += 2 * XY[i] * omega * (XY[i] * etw - rel_swing_pos(i)) * etw / t - (XY[0] * etw - rel_swing_pos(i)) * (XY[0] * etw - rel_swing_pos(i)) / (t * t);
+          }
+          grad -= rel_swing_pos(2) * rel_swing_pos(2) / (t * t);
+          t -= alpha * grad;
+          // std::cerr << "t: " << t << ", grad: " << grad << std::endl;
+      } while (fabs(grad) > epsilon && t < t_max);
+      return min(t, t_max);
+      // return t_max; // debug
+  }
+
   /* member function implementation for refzmp_generator */
   void refzmp_generator::push_refzmp_from_footstep_nodes_for_dual (const std::vector<step_node>& fns,
                                                                    const std::vector<step_node>& _support_leg_steps,
@@ -615,9 +644,36 @@ namespace rats
                     first_step_time = default_step_time;
                 } else {
                     int rl = cur_leg == RLEG ? -1 : 1;
-                    first_step_time = default_step_time - 0.0;
+                    // land capture point
+                    hrp::Vector3 rel_act_cog, rel_act_cogvel; // foot origin frame
+                    std::vector<double> rel_cp(2);
+                    double omega;
+                    {
+                        hrp::Matrix33 foot_origin_rot;
+                        hrp::Vector3 ez = hrp::Vector3::UnitZ();
+                        hrp::Vector3 ex = hrp::Vector3::UnitX();
+                        hrp::Vector3 xv1(get_support_leg_steps().front().worldcoords.rot * ex);
+                        xv1(2) = 0.0;
+                        xv1.normalize();
+                        hrp::Vector3 yv1(ez.cross(xv1));
+                        foot_origin_rot(0,0) = xv1(0); foot_origin_rot(1,0) = xv1(1); foot_origin_rot(2,0) = xv1(2);
+                        foot_origin_rot(0,1) = yv1(0); foot_origin_rot(1,1) = yv1(1); foot_origin_rot(2,1) = yv1(2);
+                        foot_origin_rot(0,2) = ez(0); foot_origin_rot(1,2) = ez(1); foot_origin_rot(2,2) = ez(2);
+                        rel_act_cog = foot_origin_rot.transpose() * (act_cog - get_support_leg_steps().front().worldcoords.pos);
+                        rel_act_cogvel = foot_origin_rot.transpose() * (act_cogvel - get_support_leg_steps().front().worldcoords.pos);
+                        omega = std::sqrt(gravitational_acceleration / rel_act_cog(2));
+                        rel_cp[0] = rel_act_cogvel(0) / omega + rel_act_cog(0);
+                        rel_cp[1] = rel_act_cogvel(1) / omega + rel_act_cog(1);
+                    }
+                    // if (-0.06 > rel_act_cogvel(1) / std::sqrt(gravitational_acceleration / rel_act_cog(2)) + rel_act_cog(1)) {
+                    //     std::cerr << "ankle unstable: " << rel_cp[0] << ", " << rel_cp[1] << std::endl;
+                    // }
+                    // first_step_time = default_step_time - 0.0;
                     // first_step_time = get_lcg_count() * dt; // remain time
 
+                    double L = 0.85 - 0.05;
+                    double y_offset = get_support_leg_steps().front().l_r == RLEG ? 0.2 : -0.2;
+                    first_step_time = calc_land_t(rel_act_cog, rel_act_cogvel, get_swing_leg_steps()[0].worldcoords.pos - get_support_leg_steps()[0].worldcoords.pos, gravitational_acceleration, y_offset, L);
                     // stair
                     if (swing_leg_regenerate_type == 1 || swing_leg_regenerate_type == 2 || lcg.get_swing_leg_src_steps()[0].worldcoords.pos[2] < tmp_coords.pos[2] - 0.01) {
                         if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2] + lcg.get_default_step_height() / 2.0) tmp_coords.pos[2] = get_swing_leg_steps()[0].worldcoords.pos[2] + 0.02; // tmp comment out
@@ -633,9 +689,12 @@ namespace rats
                         }
                     } // else if (swing_leg_regenerate_type == 0) {
                     else { // walk on the same level
-                        tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.05;
-                        tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
+                        // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.05;
+                        // tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
                         // tmp_coords.pos[2] += 0.1;
+                        // land CP
+                        tmp_coords.pos[0] = (rel_act_cog(0) * omega + rel_act_cogvel(0)) / omega * exp(omega * first_step_time);
+                        tmp_coords.pos[1] = (rel_act_cog(1) * omega + rel_act_cogvel(1)) / omega * exp(omega * first_step_time);
 
                         // set_default_orbit_type(CYCLOIDDELAY);
                         set_default_orbit_type(RECTANGLE);

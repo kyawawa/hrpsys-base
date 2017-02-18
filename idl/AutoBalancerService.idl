@@ -96,6 +96,7 @@ module OpenHRP
       RECTANGLE,
       STAIR,
       STAIRSHORT,
+      STAIRAVOID,
       CYCLOIDDELAY,
       CYCLOIDDELAYKICK,
       CROSS

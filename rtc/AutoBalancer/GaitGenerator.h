@@ -18,7 +18,7 @@ namespace rats
                            const double default_top_ratio = 0.5);
     void multi_mid_coords (coordinates& mid_coords, const std::vector<coordinates>& cs);
 
-    enum orbit_type {SHUFFLING, CYCLOID, RECTANGLE, STAIR, STAIRSHORT, CYCLOIDDELAY, CYCLOIDDELAYKICK, CROSS};
+    enum orbit_type {SHUFFLING, CYCLOID, RECTANGLE, STAIR, STAIRSHORT, STAIRAVOID, CYCLOIDDELAY, CYCLOIDDELAYKICK, CROSS};
     enum leg_type {RLEG, LLEG, RARM, LARM, BOTH, ALL};
     enum stride_limitation_type {SQUARE, CIRCLE};
 
@@ -469,6 +469,9 @@ namespace rats
               case STAIRSHORT:
                   generate_stair_short_trajectory(start, goal, height, _way_point_offset, stair_point, stair_goal_offset);
                   break;
+              case STAIRAVOID:
+                  generate_stair_avoid_trajectory(start, goal, height, _way_point_offset);
+                  break;
               case CYCLOIDDELAY:
                   generate_cycloid_trajectory(start, goal, height);
                   break;
@@ -631,6 +634,24 @@ namespace rats
         for (size_t i = 0; i < path.size(); ++i) {
             std::cerr << "path" << i << ": " << path[i].transpose() << std::endl;
         }
+        final_path_distance_ratio = calc_antecedent_path_base(path);
+      };
+      void generate_stair_avoid_trajectory(const hrp::Vector3& start, const hrp::Vector3& goal, const double height, const hrp::Vector3 _way_point_offset)
+      {
+        std::vector<hrp::Vector3> path;
+        double max_height = std::max(start(2), goal(2))+height;
+        hrp::Vector3 diff_vec = goal - start;
+        diff_vec(2) = 0.0; // projection on horizontal plane
+        path.push_back(start);
+        if (diff_vec.norm() > 1e-4) {
+            path.push_back(hrp::Vector3(start - _way_point_offset(0) * diff_vec.normalized()));
+            path.push_back(hrp::Vector3(start - _way_point_offset(0) * diff_vec.normalized() + hrp::Vector3(0, 0, height)));
+        }
+        path.push_back(hrp::Vector3(goal(0), goal(1), max_height));
+        path.push_back(goal);
+        // for (size_t i = 0; i < path.size(); ++i) {
+        //     std::cerr << "path" << i << ": " << path[i].transpose() << std::endl;
+        // }
         final_path_distance_ratio = calc_antecedent_path_base(path);
       };
       void generate_cycloid_trajectory(const hrp::Vector3& start, const hrp::Vector3& goal, const double height)
@@ -1759,6 +1780,8 @@ namespace rats
             std::cerr << "CROSS" << std::endl;
         } else if (get_default_orbit_type() == STAIRSHORT) {
             std::cerr << "STAIRSHORT" << std::endl;
+        } else if (get_default_orbit_type() == STAIRAVOID) {
+            std::cerr << "STAIRAVOID" << std::endl;
         }
         std::cerr << "[" << print_str << "]   swing_trajectory_delay_time_offset = " << get_swing_trajectory_delay_time_offset() << "[s], swing_trajectory_final_distance_weight = " << get_swing_trajectory_final_distance_weight()
                   << ", swing_trajectory_time_offset_xy2z = " << get_swing_trajectory_time_offset_xy2z() << std::endl;

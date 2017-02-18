@@ -526,8 +526,11 @@ namespace rats
           current_count++;
       };
       hrp::Vector3 get_pos() const { return pos; };
-      void set_pos(hrp::Vector3 _pos) { pos = _pos; };
+      hrp::Vector3 get_vel() const { return vel; };
       hrp::Vector3 get_acc() const { return acc; };
+      void set_pos(hrp::Vector3 _pos) { pos = _pos; };
+      void set_vel(hrp::Vector3 _vel) { vel = _vel; };
+      void set_acc(hrp::Vector3 _acc) { acc = _acc; };
       double get_swing_trajectory_delay_time_offset () const { return time_offset; };
       double get_swing_trajectory_final_distance_weight () const { return final_distance_weight; };
       double get_swing_trajectory_time_offset_xy2z () const { return time_offset_xy2z; };
@@ -1067,7 +1070,13 @@ namespace rats
         //     break;
         default:
             hrp::Vector3 tmp_pos = hrp::Vector3::Zero();
-            if (!dhtg.empty()) tmp_pos = dhtg.front().get_pos();
+            hrp::Vector3 tmp_vel = hrp::Vector3::Zero();
+            hrp::Vector3 tmp_acc = hrp::Vector3::Zero();
+            if (!dhtg.empty()) {
+                tmp_pos = dhtg.front().get_pos();
+                tmp_vel = dhtg.front().get_vel();
+                tmp_acc = dhtg.front().get_acc();
+            }
             dhtg.clear();
             for (size_t i = 0; i < swing_leg_dst_steps.size(); i++) {
                 dhtg.push_back(delay_hoffarbib_trajectory_generator());
@@ -1075,6 +1084,8 @@ namespace rats
                     dhtg.back().reset_all(dt, one_step_count, 0, default_double_support_ratio_after,
                                           time_offset, final_distance_weight, time_offset_xy2z);
                     dhtg.back().set_pos(tmp_pos);
+                    // dhtg.back().set_vel(tmp_vel);
+                    // dhtg.back().set_acc(tmp_acc);
                     current_step_height = default_step_height;
                 }
                 else dhtg.back().reset_all(dt, one_step_count,
@@ -1279,7 +1290,7 @@ namespace rats
     velocity_mode_parameter vel_param, offset_vel_param;
     toe_heel_type_checker thtc;
     hrp::Vector3 cog, refzmp, prev_que_rzmp; /* cog by calculating proc_one_tick */
-    hrp::Vector3 ref_cog, act_cog, ref_cogvel, act_cogvel;
+    hrp::Vector3 ref_cog, act_cog, ref_cogvel, act_cogvel, act_cogacc;
     std::vector<hrp::Vector3> swing_foot_zmp_offsets, prev_que_sfzos;
     double dt; /* control loop [s] */
     std::vector<std::string> all_limbs;
@@ -1347,7 +1358,8 @@ namespace rats
                     const double _stride_fwd_x, const double _stride_y, const double _stride_theta, const double _stride_bwd_x)
         : footstep_nodes_list(), overwrite_footstep_nodes_list(), rg(_dt), lcg(_dt),
         footstep_param(_leg_pos, _stride_fwd_x, _stride_y, _stride_theta, _stride_bwd_x),
-        vel_param(), offset_vel_param(), thtc(), cog(hrp::Vector3::Zero()), refzmp(hrp::Vector3::Zero()), prev_que_rzmp(hrp::Vector3::Zero()), ref_cog(hrp::Vector3::Zero()), act_cog(hrp::Vector3::Zero()), ref_cogvel(hrp::Vector3::Zero()), act_cogvel(hrp::Vector3::Zero()),
+        vel_param(), offset_vel_param(), thtc(), cog(hrp::Vector3::Zero()), refzmp(hrp::Vector3::Zero()), prev_que_rzmp(hrp::Vector3::Zero()),
+        ref_cog(hrp::Vector3::Zero()), act_cog(hrp::Vector3::Zero()), ref_cogvel(hrp::Vector3::Zero()), act_cogvel(hrp::Vector3::Zero()), act_cogacc(hrp::Vector3::Zero()),
         dt(_dt), all_limbs(_all_limbs), default_step_time(1.0), default_double_support_ratio_before(0.1), default_double_support_ratio_after(0.1), default_double_support_static_ratio_before(0.0), default_double_support_static_ratio_after(0.0), default_double_support_ratio_swing_before(0.1), default_double_support_ratio_swing_after(0.1), gravitational_acceleration(DEFAULT_GRAVITATIONAL_ACCELERATION),
         finalize_count(0), optional_go_pos_finalize_footstep_num(0), overwrite_footstep_index(0), overwritable_footstep_index_offset(1),
         velocity_mode_flg(VEL_IDLING), emergency_flg(IDLING),
@@ -1564,7 +1576,11 @@ namespace rats
     void set_toe_check_thre (const double _a) { thtc.set_toe_check_thre(_a); };
     void set_heel_check_thre (const double _a) { thtc.set_heel_check_thre(_a); };
     void set_act_cog (const hrp::Vector3 _cog) { act_cog = _cog; };
-    void set_act_cogvel (const hrp::Vector3 _cogvel) { act_cogvel = _cogvel; };
+    void set_act_cogvel (const hrp::Vector3 _cogvel)
+    {
+        act_cogacc = (_cogvel - act_cogvel) / dt;
+        act_cogvel = _cogvel;
+    };
     void set_ref_cog (const hrp::Vector3 _cog) { ref_cog = _cog; };
     void set_ref_cogvel (const hrp::Vector3 _cogvel) { ref_cogvel = _cogvel; };
     /* Get overwritable footstep index. For example, if overwritable_footstep_index_offset = 1, overwrite next footstep. If overwritable_footstep_index_offset = 0, overwrite current swinging footstep. */

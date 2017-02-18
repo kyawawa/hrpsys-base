@@ -1208,6 +1208,20 @@ namespace rats
             }
         }
     }
+    // std::cerr << "act_cog: " << act_cog.transpose() << std::endl;
+    // std::cerr << "act_cogvel: " << act_cogvel.transpose() << std::endl;
+    // std::cerr << "act_cogacc: " << act_cogacc.transpose() << std::endl;
+    // std::cerr << "cog: " << cog.transpose() << std::endl;
+    // Eigen::Matrix<double, 3, 2> x_k;
+    // Eigen::Matrix<double, 4, 2> x_k_e;
+    // hrp::dmatrix act_x_k(3, 2);
+    // act_x_k(0, 0) = act_cog(0), act_x_k(0, 1) = act_cog(1),
+    // act_x_k(1, 0) = act_cogvel(0), act_x_k(1, 1) = act_cogvel(1),
+    // act_x_k(2, 0) = act_cogacc(0), act_x_k(2, 1) = act_cogacc(1);
+    // preview_controller_ptr->get_x_k(x_k);
+    // preview_controller_ptr->get_x_k_e(x_k_e);
+    // x_k_e.block(1, 0, 3, 2) = x_k_e.block(1, 0, 3, 2) - x_k + act_x_k;
+    // preview_controller_ptr->set_x_k_e(x_k_e);
     /* fill preview controller queue by new refzmp */
     hrp::Vector3 rzmp;
     while ( !solved ) {

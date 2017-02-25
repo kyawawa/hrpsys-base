@@ -1201,8 +1201,8 @@ void Stabilizer::getActualParameters ()
         if ( i == 0 ) f_diff += -1*sensor_force;
         else f_diff += sensor_force;
         for (size_t j = 0; j < 3; ++j) {
-            if ((!contact_states[i] || !isContact(i)) && fabs(ikp.ref_force(j) - sensor_force(j)) > eefm_swing_damping_force_thre[j]) large_swing_f_diff[j] = true;
-            if ((!contact_states[i] || !isContact(i)) && (fabs(ikp.ref_moment(j) - ee_moment(j)) > eefm_swing_damping_moment_thre[j])) large_swing_m_diff[j] = true;
+            if ((!contact_states[i] || !isContact(i)) && fabs(ikp.ref_force(j) - sensor_force(j)) >= eefm_swing_damping_force_thre[j]) large_swing_f_diff[j] = true;
+            if ((!contact_states[i] || !isContact(i)) && (fabs(ikp.ref_moment(j) - ee_moment(j)) >= eefm_swing_damping_moment_thre[j])) large_swing_m_diff[j] = true;
         }
         // Moment limitation
         hrp::Matrix33 ee_R(target->R * ikp.localR);

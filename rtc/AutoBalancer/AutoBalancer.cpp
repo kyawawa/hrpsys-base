@@ -1593,20 +1593,28 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   // gg->set_default_double_support_ratio_swing_after(i_param.default_double_support_ratio_swing_after);
   if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::SHUFFLING) {
     gg->set_default_orbit_type(SHUFFLING);
+    gg->set_org_orbit_type(SHUFFLING);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::CYCLOID) {
     gg->set_default_orbit_type(CYCLOID);
+    gg->set_org_orbit_type(CYCLOID);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::RECTANGLE) {
     gg->set_default_orbit_type(RECTANGLE);
+    gg->set_org_orbit_type(RECTANGLE);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::STAIR) {
     gg->set_default_orbit_type(STAIR);
+    gg->set_org_orbit_type(STAIR);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::STAIRSHORT) {
     gg->set_default_orbit_type(STAIRSHORT);
+    gg->set_org_orbit_type(STAIRSHORT);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::CYCLOIDDELAY) {
     gg->set_default_orbit_type(CYCLOIDDELAY);
+    gg->set_org_orbit_type(CYCLOIDDELAY);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::CYCLOIDDELAYKICK) {
     gg->set_default_orbit_type(CYCLOIDDELAYKICK);
+    gg->set_org_orbit_type(CYCLOIDDELAYKICK);
   } else if (i_param.default_orbit_type == OpenHRP::AutoBalancerService::CROSS) {
     gg->set_default_orbit_type(CROSS);
+    gg->set_org_orbit_type(CROSS);
   }
   gg->set_swing_trajectory_delay_time_offset(i_param.swing_trajectory_delay_time_offset);
   gg->set_swing_trajectory_final_distance_weight(i_param.swing_trajectory_final_distance_weight);
@@ -1640,12 +1648,14 @@ bool AutoBalancer::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::Gai
   gg->set_footstep_modification_gain(i_param.footstep_modification_gain);
   gg->set_modify_footsteps(i_param.modify_footsteps);
   gg->set_cp_check_margin(i_param.cp_check_margin);
+  gg->set_regeneration_height(i_param.regeneration_height);
   if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::SQUARE) {
     gg->set_stride_limitation_type(SQUARE);
   } else if (i_param.stride_limitation_type == OpenHRP::AutoBalancerService::CIRCLE) {
     gg->set_stride_limitation_type(CIRCLE);
   }
   gg->set_swing_leg_regenerate_type(i_param.swing_leg_regenerate_type);
+  gg->set_modify_footsteps_collision(i_param.modify_footsteps_collision);
   // print
   gg->print_param(std::string(m_profile.instance_name));
   return true;
@@ -1741,12 +1751,16 @@ bool AutoBalancer::getGaitGeneratorParam(OpenHRP::AutoBalancerService::GaitGener
   for (size_t i=0; i<2; i++) {
     i_param.cp_check_margin[i] = gg->get_cp_check_margin(i);
   }
+  for (size_t i=0; i<2; i++) {
+    i_param.regeneration_height[i] = gg->get_regeneration_height(i);
+  }
   if (gg->get_stride_limitation_type() == SQUARE) {
     i_param.stride_limitation_type = OpenHRP::AutoBalancerService::SQUARE;
   } else if (gg->get_stride_limitation_type() == CIRCLE) {
     i_param.stride_limitation_type = OpenHRP::AutoBalancerService::CIRCLE;
   }
   i_param.swing_leg_regenerate_type = gg->get_swing_leg_regenerate_type();
+  i_param.modify_footsteps_collision = gg->get_modify_footsteps_collision();
   return true;
 };
 

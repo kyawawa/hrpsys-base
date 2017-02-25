@@ -261,6 +261,8 @@ module OpenHRP
       DblArray2 cp_check_margin;
       /// How to regenerate swinging leg trajectory
       long swing_leg_regenerate_type;
+      DblArray2 regeneration_height;
+      boolean modify_footsteps_collision;
     };
 
     /**

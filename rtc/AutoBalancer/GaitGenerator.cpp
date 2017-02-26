@@ -665,11 +665,14 @@ namespace rats
                               footstep_nodes_list.end(),
                               overwrite_footstep_nodes_list.begin() + 1);
                 } else { // stop walking
+                    coordinates sup_dst_coords = tmp_coords;
+                    sup_dst_coords.pos[1] += first_step == RLEG ? 0.2 : -0.2;
                     // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0)));
                     overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
                     // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
-                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, 3.2, 0, 0)));
-                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, 3.2, 0, 0)));
+                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, sup_dst_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));
+                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
                 }
 
                 modify_footsteps = modify_footsteps_collision;
@@ -775,7 +778,7 @@ namespace rats
         }
       }
       // if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
-      if (lcg.get_footstep_index() < footstep_nodes_list.size()-1) {
+      if (lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
         // calculate sum of preview_f
         static double preview_f_sum;
         if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {

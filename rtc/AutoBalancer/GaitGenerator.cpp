@@ -609,11 +609,11 @@ namespace rats
             leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
             collision_point = get_swing_leg_steps()[0].worldcoords.pos;
             {
-                // int max_idx;
-                // (get_swing_leg_src_steps().front().worldcoords.pos - get_swing_leg_dst_steps().front().worldcoords.pos).cwiseAbs().maxCoeff(&max_idx);
-                collision_direction = hrp::Vector3(1, 0, 0); // X
-                // collision_direction = hrp::Vector3::Zero();
-                // collision_direction(max_idx) = 1;
+                int max_idx;
+                (get_swing_leg_src_steps().front().worldcoords.pos - get_swing_leg_dst_steps().front().worldcoords.pos).segment(0, 2).cwiseAbs().maxCoeff(&max_idx);
+                // collision_direction = hrp::Vector3(1, 0, 0); // X
+                collision_direction = hrp::Vector3::Zero();
+                collision_direction(max_idx) = 1;
             }
 
             if (overwritable_footstep_index_offset > 0) {
@@ -650,8 +650,22 @@ namespace rats
                             // footstep_nodes_list[lcg.get_footstep_index() + i].front().worldcoords.pos += step_compensation;
                             footstep_nodes_list[lcg.get_footstep_index() + i].front().worldcoords.pos[0] += diff_stair_point;
                         }
-                    } // else if (swing_leg_regenerate_type == 0) {
-                    else { // walk on the same level
+                    } else if (swing_leg_regenerate_type == 3) { // straddle
+                        // if (get_swing_leg_steps()[0].worldcoords.pos[2] > tmp_coords.pos[2] + lcg.get_default_step_height() / 1.5) lcg.set_default_step_height(lcg.get_default_step_height() + (lcg.get_default_step_height() - get_swing_leg_steps()[0].worldcoords.pos[2]));
+                        set_org_orbit_type(get_default_orbit_type());
+                        set_default_orbit_type(STAIRAVOID);
+                        hrp::Vector3 ref_stair_point = get_stair_point();
+                        double diff_stair_point = get_swing_leg_steps()[0].worldcoords.pos[1] - get_swing_leg_src_steps()[0].worldcoords.pos[1] - ref_stair_point(1);
+                        ref_stair_point(1) = get_swing_leg_steps()[0].worldcoords.pos[1] - get_support_leg_steps().front().worldcoords.pos[1];
+                        set_stair_point(ref_stair_point);
+                        // tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] + 0.23; // 0.23: foot depth
+                        tmp_coords.pos[1] += diff_stair_point;
+                        // hrp::Vector3 step_compensation = tmp_coords.pos - footstep_nodes_list[lcg.get_footstep_index()].front().worldcoords.pos;
+                        for (size_t i = 1; i < footstep_nodes_list.size() - lcg.get_footstep_index(); ++i) {
+                            // footstep_nodes_list[lcg.get_footstep_index() + i].front().worldcoords.pos += step_compensation;
+                            footstep_nodes_list[lcg.get_footstep_index() + i].front().worldcoords.pos[1] += diff_stair_point;
+                        }
+                    } else { // walk on the same level
                         tmp_coords.pos[0] = get_swing_leg_steps()[0].worldcoords.pos[0] - 0.03;
                         tmp_coords.pos[1] = get_swing_leg_steps()[0].worldcoords.pos[1];// + rl * 0.1;
                         // tmp_coords.pos[2] += 0.1;
@@ -664,7 +678,7 @@ namespace rats
                         // first_step_time = 0.9;
                     }
                 }
-                if (swing_leg_regenerate_type == 2) { // continue walking
+                if (swing_leg_regenerate_type == 2 || swing_leg_regenerate_type == 3) { // continue walking
                     overwrite_footstep_nodes_list.resize(footstep_nodes_list.size() - lcg.get_footstep_index());
                     overwrite_footstep_nodes_list[0] = boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0));
                     std::copy(footstep_nodes_list.begin() + lcg.get_footstep_index() + 1,

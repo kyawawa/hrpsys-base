@@ -873,6 +873,7 @@ namespace rats
       hrp::Vector3 default_way_point_offset;
       bool update_trajectory;
       hrp::Vector3  stair_point, default_stair_goal_offset;
+      std::map<leg_type, std::vector<double> > foot_offset;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -919,6 +920,18 @@ namespace rats
         default_way_point_offset = hrp::Vector3(0.3, 0.0, 0.0);
         stair_point = hrp::Vector3::Zero();
         default_stair_goal_offset = hrp::Vector3(0.13, 0, 0);
+        {
+            std::vector<double> rleg_vec(4);
+            rleg_vec[0] = 0.13; // front
+            rleg_vec[1] = 0.10; // rear
+            rleg_vec[2] = 0.06; // left
+            rleg_vec[3] = 0.082; // right
+            std::vector<double> lleg_vec(rleg_vec);
+            lleg_vec[2] = rleg_vec[3];
+            lleg_vec[3] = rleg_vec[2];
+            foot_offset[RLEG] = rleg_vec;
+            foot_offset[LLEG] = lleg_vec;
+        }
         if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt);
         if (swing_foot_rot_ratio_interpolator == NULL) swing_foot_rot_ratio_interpolator = new interpolator(1, dt);
         //if (foot_ratio_interpolator == NULL) foot_ratio_interpolator = new interpolator(1, dt, interpolator::LINEAR);
@@ -1327,7 +1340,6 @@ namespace rats
     size_t swing_leg_regenerate_type;
     hrp::Vector3 collision_point, collision_direction;
     double regeneration_height[2];
-    std::map<leg_type, std::vector<double> > foot_offset;
 
     /* preview controller parameters */
     //preview_dynamics_filter<preview_control>* preview_controller_ptr;
@@ -1379,18 +1391,6 @@ namespace rats
         swing_foot_zmp_offsets = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         prev_que_sfzos = boost::assign::list_of<hrp::Vector3>(hrp::Vector3::Zero());
         leg_type_map = boost::assign::map_list_of<leg_type, std::string>(RLEG, "rleg")(LLEG, "lleg")(RARM, "rarm")(LARM, "larm");
-        {
-            std::vector<double> rleg_vec(4);
-            rleg_vec[0] = 0.13; // front
-            rleg_vec[1] = 0.10; // rear
-            rleg_vec[2] = 0.06; // left
-            rleg_vec[3] = 0.082; // right
-            std::vector<double> lleg_vec(rleg_vec);
-            lleg_vec[2] = rleg_vec[3];
-            lleg_vec[3] = rleg_vec[2];
-            foot_offset[RLEG] = rleg_vec;
-            foot_offset[LLEG] = lleg_vec;
-        }
         for (size_t i = 0; i < 4; i++) leg_margin[i] = 0.1;
         for (size_t i = 0; i < 4; i++) stride_limitation_for_circle_type[i] = 0.2;
         for (size_t i = 0; i < 4; i++) overwritable_stride_limitation[i] = 0.2;

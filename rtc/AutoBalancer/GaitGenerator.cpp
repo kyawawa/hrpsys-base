@@ -608,7 +608,13 @@ namespace rats
             leg_type cur_leg = footstep_nodes_list[lcg.get_footstep_index()].front().l_r;
             leg_type first_step = overwritable_footstep_index_offset % 2 == 0 ? cur_leg : (cur_leg == RLEG ? LLEG : RLEG);
             collision_point = get_swing_leg_steps()[0].worldcoords.pos;
-            collision_direction = hrp::Vector3(1, 0, 0); // X
+            {
+                // int max_idx;
+                // (get_swing_leg_src_steps().front().worldcoords.pos - get_swing_leg_dst_steps().front().worldcoords.pos).cwiseAbs().maxCoeff(&max_idx);
+                collision_direction = hrp::Vector3(1, 0, 0); // X
+                // collision_direction = hrp::Vector3::Zero();
+                // collision_direction(max_idx) = 1;
+            }
 
             if (overwritable_footstep_index_offset > 0) {
                 overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, footstep_nodes_list[get_overwritable_index() - 2].front().worldcoords, lcg.get_default_step_height() + 0.2, default_step_time, 0, 0)));
@@ -803,7 +809,10 @@ namespace rats
             hrp::Vector3 orig_footstep_pos = footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos;
             for (size_t i = 0; i < 2; i++) {
                 if (is_emergency_walking[i]) {
-                    if (collision_direction(i) != 0) footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos(i) = min(collision_point(i) - collision_direction(i) * 0.03, collision_direction(i) * (footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos(i) + d_footstep(i)));
+                    if (collision_direction(i) != 0 && swing_leg_regenerate_type == 0) {
+                        footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos(i) = min(collision_point(i) - collision_direction(i) * 0.03,
+                                                                                                       collision_direction(i) * (footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos(i) + d_footstep(i)));
+                    }
                     else footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos(i) += d_footstep(i);
                 }
             }

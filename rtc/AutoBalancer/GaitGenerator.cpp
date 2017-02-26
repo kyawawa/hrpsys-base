@@ -671,8 +671,8 @@ namespace rats
                         // tmp_coords.pos[2] += 0.1;
 
                         set_org_orbit_type(get_default_orbit_type());
-                        // set_default_orbit_type(CYCLOIDDELAY);
-                        set_default_orbit_type(RECTANGLE);
+                        set_default_orbit_type(CYCLOIDDELAY);
+                        // set_default_orbit_type(RECTANGLE);
                         // set_default_orbit_type(STAIRAVOID);
                         // set_stair_trajectory_way_point_offset(hrp::Vector3(0.1, 0.0, 0.0));
                         // first_step_time = 0.9;
@@ -687,12 +687,12 @@ namespace rats
                 } else { // stop walking
                     coordinates sup_dst_coords = tmp_coords;
                     sup_dst_coords.pos[1] += first_step == RLEG ? 0.2 : -0.2;
-                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height(), first_step_time, 0, 0)));
-                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
+                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, lcg.get_default_step_height() / 2.0, first_step_time, 0, 0)));
+                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, first_step_time, 0, 0)));
                     // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, default_step_time, 0, 0)));
-                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, 3.2, 0, 0)));
-                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, sup_dst_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));
-                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
+                    overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, get_support_leg_steps().front().worldcoords, 0, 3.2, 0, 0)));
+                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step==RLEG?LLEG:RLEG, sup_dst_coords, lcg.get_default_step_height(), default_step_time, 0, 0)));
+                    // overwrite_footstep_nodes_list.push_back(boost::assign::list_of(step_node(first_step, tmp_coords, 0, default_step_time, 0, 0)));
                 }
 
                 modify_footsteps = modify_footsteps_collision;
@@ -834,14 +834,14 @@ namespace rats
             d_footstep = footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos - orig_footstep_pos;
             // std::cerr << "d_footstep: " << d_footstep.transpose() << std::endl;
             // may change support leg steps
-            if (footstep_nodes_list.size() > 2) { // one step walking stop
+            if (footstep_nodes_list.size() > 1) { // one step walking stop
                 for (size_t i = lcg.get_footstep_index()+1; i < footstep_nodes_list.size(); i++) {
                     footstep_nodes_list[i].front().worldcoords.pos += d_footstep;
                 }
             }
         }
         set_update_trajectory(true);
-        if (swing_leg_regenerate_type == 0) set_default_orbit_type(RECTANGLE);
+        // if (swing_leg_regenerate_type == 0) set_default_orbit_type(RECTANGLE);
         overwrite_footstep_nodes_list.insert(overwrite_footstep_nodes_list.end(), footstep_nodes_list.begin()+lcg.get_footstep_index(), footstep_nodes_list.end());
         // overwrite zmp
         overwrite_refzmp_queue(overwrite_footstep_nodes_list);

@@ -115,6 +115,11 @@ CORBA::Boolean AutoBalancerService_impl::setRMCSelectionMatrix(const OpenHRP::Au
     return m_autobalancer->setRMCSelectionMatrix(Svec);
 };
 
+CORBA::Boolean AutoBalancerService_impl::startJump(CORBA::Double height, const OpenHRP::AutoBalancerService::DblArray6 Svec)
+{
+    return m_autobalancer->startJump(height, Svec);
+};
+
 void AutoBalancerService_impl::autobalancer(AutoBalancer *i_autobalancer)
 {
   m_autobalancer = i_autobalancer;

@@ -115,6 +115,7 @@ public:
   bool releaseEmergencyStop();
   bool setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec);
   bool setRMCSelectionMatrix(const hrp::dvector6& Svec) {rmc->setSelectionMatrix(Svec);};
+  bool startJump(const double height, const OpenHRP::AutoBalancerService::DblArray6 Svec);
 
  protected:
   // Configuration variable declaration
@@ -232,10 +233,11 @@ public:
   typedef boost::shared_ptr<rats::RMController> rmcPtr;
   rmcPtr rmc;
   std::map<std::string, hrp::dvector6> xi_ref;
+  double jump_height;
   // for abc
   hrp::Vector3 ref_cog, ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
   enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;
-  enum {MODE_IDLE, MODE_ABC, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_ABC} control_mode, return_control_mode;
+    enum {MODE_IDLE, MODE_ABC, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_ABC, MODE_JUMP} control_mode, return_control_mode;
   std::map<std::string, ABCIKparam> ikp;
   std::map<std::string, size_t> contact_states_index_map;
   std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
@@ -261,7 +263,7 @@ public:
   hrp::Vector3 sbp_offset, sbp_cog_offset;
   enum {MODE_NO_FORCE, MODE_REF_FORCE} use_force;
   std::vector<hrp::Vector3> ref_forces;
-  enum {MODE_IK, MODE_RMC} ik_type;
+  enum {MODE_IK, MODE_RMC, MODE_JUMP} ik_type;
 
   unsigned int m_debugLevel;
   bool is_legged_robot, is_stop_mode, has_ik_failed, is_hand_fix_mode, is_hand_fix_initial;

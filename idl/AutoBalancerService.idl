@@ -147,7 +147,8 @@ module OpenHRP
      */
     enum IKType {
         MODE_IK,
-        MODE_RMC
+        MODE_RMC,
+        MODE_JUMP
     };
 
     /**
@@ -451,5 +452,6 @@ module OpenHRP
      */
     boolean releaseEmergencyStop();
     boolean setRMCSelectionMatrix(in DblArray6 Svec);
+    boolean startJump(in double height, in DblArray6 Svec);
   };
 };

@@ -35,6 +35,7 @@ public:
   CORBA::Boolean getGoPosFootstepsSequence(CORBA::Double x, CORBA::Double y, CORBA::Double th, OpenHRP::AutoBalancerService::FootstepsSequence_out o_footstep);
   CORBA::Boolean releaseEmergencyStop();
   CORBA::Boolean setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec);
+  CORBA::Boolean startJump(CORBA::Double height, const OpenHRP::AutoBalancerService::DblArray6 Svec);
   //
   //
   void autobalancer(AutoBalancer *i_autobalancer);

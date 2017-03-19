@@ -484,7 +484,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       if (control_mode != MODE_IDLE ) {
         if (ik_type == MODE_IK) {
             solveLimbIK();
-        } else {
+        } else if (ik_type == MODE_RMC) {
             // RMC
             for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
                 if (it->second.is_active) {
@@ -521,6 +521,43 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
             rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
 
             if (gg_is_walking && !gg_solved) stopWalking ();
+        } else { // if (ik_type == MODE_JUMP)
+            static const double v = sqrt(2 * 9.81 * jump_height);
+            static const double dif_h = 0.15;
+            static int count = 0;
+            static const int max_count = static_cast<int>(2 * dif_h / v / m_dt); // 1/2 vt = dif_h
+            for (int i = 0; i < m_robot->numJoints(); ++i) {
+                m_robot->joint(i)->q = qorg[i];
+            }
+            m_robot->rootLink()->p = current_root_p;
+            m_robot->rootLink()->R = current_root_R;
+            m_robot->calcForwardKinematics();
+
+            // std::cerr << "root_p: " << (m_robot->rootLink()->p).transpose() << std::endl;
+            // std::cerr << "JUMP " << t << ", " << t1 << std::endl;
+            if (count <= max_count) {
+                std::cerr << "count: " << count << std::endl;
+                std::cerr << "max_count: " << max_count << std::endl;
+
+                hrp::Vector3 dc(0, 0, v * (double)count / max_count);
+                ref_basePos = m_robot->rootLink()->p + dc * m_dt;
+                ref_baseRot = m_robot->rootLink()->R;
+                ref_cog = m_robot->calcCM() + dc * m_dt;
+                hrp::Vector3 Pref = dc * m_robot->totalMass();
+                hrp::Vector3 Lref = hrp::Vector3::Zero();
+                for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+                    xi_ref[it->second.target_link->name] = hrp::dvector6::Zero(6, 1);
+                }
+                // std::cerr << "Pref" << std::endl << Pref.transpose() << std::endl;
+                // std::cerr << "CM: " << (m_robot->calcCM()).transpose() << std::endl;
+                rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
+                // std::cerr << "Ref Pos" << std::endl << ref_basePos.transpose() << std::endl;
+                // std::cerr << "Modified Pos" << std::endl << ref_basePos.transpose() << std::endl;
+                // m_robot->rootLink()->p = ref_basePos;
+                // m_robot->rootLink()->R = ref_baseRot;
+                // m_robot->calcForwardKinematics();
+                ++count;
+            }
         }
         rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
       } else {
@@ -1321,6 +1358,16 @@ bool AutoBalancer::setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::Dbl
         tmp_svec(i) = Svec[i];
     }
     setRMCSelectionMatrix(tmp_svec);
+}
+
+bool AutoBalancer::startJump(const double height, const OpenHRP::AutoBalancerService::DblArray6 Svec)
+{
+    jump_height = height;
+    setRMCSelectionMatrix(Svec);
+
+    control_mode = MODE_CJUMP;
+    ik_type = MODE_JUMP;
+    return true;
 }
 
 bool AutoBalancer::setFootSteps(const OpenHRP::AutoBalancerService::FootstepsSequence& fss, CORBA::Long overwrite_fs_idx)

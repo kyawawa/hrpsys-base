@@ -1122,8 +1122,25 @@ void AutoBalancer::solveFullbodyIK ()
   hrp::Vector3 tmp_input_sbp = hrp::Vector3(0,0,0);
   static_balance_point_proc_one(tmp_input_sbp, ref_zmp(2));
   hrp::Vector3 dif_cog = tmp_input_sbp - ref_cog;
-  // Solve IK
-  fik->solveFullbodyIK (dif_cog, transition_interpolator->isEmpty());
+
+  if (ik_type == MODE_IK) {
+      // Solve IK
+      fik->solveFullbodyIK (dif_cog, transition_interpolator->isEmpty());
+  } else {
+      // Solve RMC
+      hrp::Vector3 ref_basePos = m_robot->rootLink()->p + -1 * fik->move_base_gain * dif_cog;
+      hrp::Matrix33 ref_baseRot = target_root_R;
+      hrp::Vector3 Pref = m_robot->totalMass() * -1 * fik->move_base_gain * dif_cog / m_dt;
+      hrp::Vector3 Lref = hrp::Vector3::Zero();
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+          hrp::dmatrix xi_ref_R = ((it->second.target_r0 - it->second.target_link->R) / m_dt) * (it->second.target_link->R).transpose();
+          xi_ref[it->second.target_link->name].segment(0, 3) = (it->second.target_p0 - it->second.target_link->p) / m_dt;
+          xi_ref[it->second.target_link->name](3) = (-xi_ref_R(1, 2) + xi_ref_R(2, 1)) / 2.0;
+          xi_ref[it->second.target_link->name](4) = (-xi_ref_R(2, 0) + xi_ref_R(0, 2)) / 2.0;
+          xi_ref[it->second.target_link->name](5) = (-xi_ref_R(0, 1) + xi_ref_R(1, 0)) / 2.0;
+      }
+      rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
+  }
 }
 
 
@@ -1791,12 +1808,8 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
   }
   std::cerr << std::endl;
   delete[] default_zmp_offsets_array;
-<<<<<<< HEAD
   std::cerr << "[" << m_profile.instance_name << "]   use_force_mode = " << getUseForceModeString() << std::endl;
-=======
-  std::cerr << "[" << m_profile.instance_name << "]   use_force_mode = " << use_force << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   ik_type = " << ik_type << std::endl;
->>>>>>> [rtc/AutoBalancer] Add MODE_RMC for calculate joint angle
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_mode = " << graspless_manip_mode << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_arm = " << graspless_manip_arm << std::endl;
   std::cerr << "[" << m_profile.instance_name << "]   graspless_manip_p_gain = " << graspless_manip_p_gain.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << std::endl;

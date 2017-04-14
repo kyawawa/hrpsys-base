@@ -361,6 +361,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     sbp_cog_offset = hrp::Vector3(0,0,0);
     //use_force = MODE_NO_FORCE;
     use_force = MODE_REF_FORCE;
+    ik_type = MODE_RMC;
 
     if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) {
       is_legged_robot = true;
@@ -1128,16 +1129,18 @@ void AutoBalancer::solveFullbodyIK ()
       fik->solveFullbodyIK (dif_cog, transition_interpolator->isEmpty());
   } else {
       // Solve RMC
+      dif_cog *= fik->ratio_for_vel;
+      dif_cog(2) = m_robot->rootLink()->p(2) - target_root_p(2);
       hrp::Vector3 ref_basePos = m_robot->rootLink()->p + -1 * fik->move_base_gain * dif_cog;
       hrp::Matrix33 ref_baseRot = target_root_R;
-      hrp::Vector3 Pref = m_robot->totalMass() * -1 * fik->move_base_gain * dif_cog / m_dt;
+      hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog / m_dt;
+      std::cerr << "Pref: " << Pref.transpose() << std::endl;
       hrp::Vector3 Lref = hrp::Vector3::Zero();
       for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-          hrp::dmatrix xi_ref_R = ((it->second.target_r0 - it->second.target_link->R) / m_dt) * (it->second.target_link->R).transpose();
-          xi_ref[it->second.target_link->name].segment(0, 3) = (it->second.target_p0 - it->second.target_link->p) / m_dt;
-          xi_ref[it->second.target_link->name](3) = (-xi_ref_R(1, 2) + xi_ref_R(2, 1)) / 2.0;
-          xi_ref[it->second.target_link->name](4) = (-xi_ref_R(2, 0) + xi_ref_R(0, 2)) / 2.0;
-          xi_ref[it->second.target_link->name](5) = (-xi_ref_R(0, 1) + xi_ref_R(1, 0)) / 2.0;
+          hrp::Matrix33 target_link_R(it->second.target_r0 * it->second.localR.transpose());
+          hrp::Matrix33 xi_ref_R(it->second.target_link->R.transpose() * target_link_R);
+          xi_ref[it->second.target_link->name].segment(0, 3) = ((it->second.target_p0 - target_link_R * it->second.localPos) - it->second.target_link->p) / m_dt;
+          xi_ref[it->second.target_link->name].segment(3, 3) = hrp::omegaFromRot(xi_ref_R) / m_dt;
       }
       rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
   }
@@ -1859,6 +1862,10 @@ bool AutoBalancer::getAutoBalancerParam(OpenHRP::AutoBalancerService::AutoBalanc
   case MODE_REF_FORCE_WITH_FOOT: i_param.use_force_mode = OpenHRP::AutoBalancerService::MODE_REF_FORCE_WITH_FOOT; break;
   case MODE_REF_FORCE_RFU_EXT_MOMENT: i_param.use_force_mode = OpenHRP::AutoBalancerService::MODE_REF_FORCE_RFU_EXT_MOMENT; break;
   default: break;
+  }
+  switch(ik_type) {
+  case MODE_IK: i_param.default_ik_type = OpenHRP::AutoBalancerService::MODE_IK; break;
+  case MODE_RMC: i_param.default_ik_type = OpenHRP::AutoBalancerService::MODE_RMC; break;
   }
   i_param.graspless_manip_mode = graspless_manip_mode;
   i_param.graspless_manip_arm = graspless_manip_arm.c_str();

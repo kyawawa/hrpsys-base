@@ -337,6 +337,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     sbp_cog_offset = hrp::Vector3(0,0,0);
     //use_force = MODE_NO_FORCE;
     use_force = MODE_REF_FORCE;
+    ik_type = MODE_RMC;
 
     if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) {
       is_legged_robot = true;
@@ -517,6 +518,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
                 xi_ref[it->second.target_link->name].segment(0, 3) = (it->second.target_p0 - it->second.target_link->p) / m_dt;
                 hrp::Matrix33 dR = it->second.target_link->R.transpose() * it->second.target_r0;
                 xi_ref[it->second.target_link->name].segment(3, 3) = hrp::omegaFromRot(dR) / m_dt;
+                // std::cerr << "xi_ref: " << xi_ref[it->second.target_link->name].transpose() << std::endl;
             }
             rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
 
@@ -1834,6 +1836,11 @@ bool AutoBalancer::getAutoBalancerParam(OpenHRP::AutoBalancerService::AutoBalanc
   switch(use_force) {
   case MODE_NO_FORCE: i_param.use_force_mode = OpenHRP::AutoBalancerService::MODE_NO_FORCE; break;
   case MODE_REF_FORCE: i_param.use_force_mode = OpenHRP::AutoBalancerService::MODE_REF_FORCE; break;
+  default: break;
+  }
+  switch(ik_type) {
+  case MODE_IK: i_param.default_ik_type = OpenHRP::AutoBalancerService::MODE_IK; break;
+  case MODE_RMC: i_param.default_ik_type = OpenHRP::AutoBalancerService::MODE_RMC; break;
   default: break;
   }
   i_param.graspless_manip_mode = graspless_manip_mode;

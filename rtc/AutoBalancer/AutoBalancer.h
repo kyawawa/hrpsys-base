@@ -23,6 +23,7 @@
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
 #include "GaitGenerator.h"
+#include "ResolvedMomentumControl.h"
 // Service implementation headers
 // <rtc-template block="service_impl_h">
 #include "AutoBalancerService_impl.h"
@@ -40,7 +41,7 @@ using namespace RTC;
 class AutoBalancer
   : public RTC::DataFlowComponentBase
 {
- public:
+public:
   AutoBalancer(RTC::Manager* manager);
   virtual ~AutoBalancer();
 
@@ -112,11 +113,13 @@ class AutoBalancer
   bool getRemainingFootstepSequence(OpenHRP::AutoBalancerService::FootstepSequence_out o_footstep, CORBA::Long& o_current_fs_idx);
   bool getGoPosFootstepsSequence(const double& x, const double& y, const double& th, OpenHRP::AutoBalancerService::FootstepsSequence_out o_footstep);
   bool releaseEmergencyStop();
+  bool setRMCSelectionMatrix(const OpenHRP::AutoBalancerService::DblArray6 Svec);
+  bool setRMCSelectionMatrix(const hrp::dvector6& Svec) {rmc->setSelectionMatrix(Svec);};
 
  protected:
   // Configuration variable declaration
   // <rtc-template block="config_declare">
-  
+
   // </rtc-template>
 
   // DataInPort declaration
@@ -137,7 +140,7 @@ class AutoBalancer
   InPort<TimedLong> m_emergencySignalIn;
   // for debug
   TimedPoint3D m_cog;
-  
+
   // </rtc-template>
 
   // DataOutPort declaration
@@ -168,7 +171,7 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
-  
+
   // </rtc-template>
 
   // CORBA Port declaration
@@ -185,7 +188,7 @@ class AutoBalancer
 
   // Consumer declaration
   // <rtc-template block="consumer_declare">
-  
+
   // </rtc-template>
 
  private:
@@ -225,6 +228,10 @@ class AutoBalancer
   typedef boost::shared_ptr<rats::gait_generator> ggPtr;
   ggPtr gg;
   bool gg_is_walking, gg_solved;
+  // for rmc
+  typedef boost::shared_ptr<rats::RMController> rmcPtr;
+  rmcPtr rmc;
+  std::map<std::string, hrp::dvector6> xi_ref;
   // for abc
   hrp::Vector3 ref_cog, ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
   enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;
@@ -254,6 +261,7 @@ class AutoBalancer
   hrp::Vector3 sbp_offset, sbp_cog_offset;
   enum {MODE_NO_FORCE, MODE_REF_FORCE} use_force;
   std::vector<hrp::Vector3> ref_forces;
+  enum {MODE_IK, MODE_RMC} ik_type;
 
   unsigned int m_debugLevel;
   bool is_legged_robot, is_stop_mode, has_ik_failed, is_hand_fix_mode, is_hand_fix_initial;

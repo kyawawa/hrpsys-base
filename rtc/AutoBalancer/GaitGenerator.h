@@ -681,7 +681,7 @@ namespace rats
       std::vector<step_node> support_leg_steps;
       // Swing leg coordinates is interpolated from swing_leg_src_coords to swing_leg_dst_coords during swing phase.
       std::vector<step_node> swing_leg_steps, swing_leg_src_steps, swing_leg_dst_steps;
-      double default_step_height, default_top_ratio, current_step_height, swing_ratio, swing_rot_ratio, foot_midcoords_ratio, dt, current_toe_angle, current_heel_angle;
+      double default_step_height, default_top_ratio, current_step_height, swing_ratio, swing_rot_ratio, prev_foot_midcoords_ratio, foot_midcoords_ratio, dt, current_toe_angle, current_heel_angle;
       double time_offset, final_distance_weight, time_offset_xy2z;
       std::vector<double> current_swing_time;
       // Index for current footstep. footstep_index should be [0,footstep_node_list.size()]. Current footstep is footstep_node_list[footstep_index].
@@ -706,6 +706,7 @@ namespace rats
       double toe_pos_offset_x, heel_pos_offset_x, toe_angle, heel_angle, foot_dif_rot_angle;
       bool use_toe_joint, use_toe_heel_auto_set;
       toe_heel_type current_src_toe_heel_type, current_dst_toe_heel_type;
+      coordinates prev_mid_coords_to_dst;
       void calc_current_swing_leg_steps (std::vector<step_node>& rets, const double step_height, const double _current_toe_angle, const double _current_heel_angle);
       double calc_interpolated_toe_heel_angle (const toe_heel_phase start_phase, const toe_heel_phase goal_phase, const double start, const double goal);
       void modif_foot_coords_for_toe_heel_phase (coordinates& org_coords, const double _current_toe_angle, const double _current_heel_angle);
@@ -727,7 +728,7 @@ namespace rats
 #endif
       leg_coords_generator(const double _dt)
         : support_leg_steps(), swing_leg_steps(), swing_leg_src_steps(), swing_leg_dst_steps(),
-          default_step_height(0.05), default_top_ratio(0.5), current_step_height(0.0), swing_ratio(0), swing_rot_ratio(0), foot_midcoords_ratio(0), dt(_dt),
+          default_step_height(0.05), default_top_ratio(0.5), current_step_height(0.0), swing_ratio(0), swing_rot_ratio(0), prev_foot_midcoords_ratio(0), foot_midcoords_ratio(0), dt(_dt),
           current_toe_angle(0), current_heel_angle(0),
           time_offset(0.35), final_distance_weight(1.0), time_offset_xy2z(0),
           footstep_index(0), lcg_count(0), default_orbit_type(CYCLOID),
@@ -888,6 +889,8 @@ namespace rats
         tmp_ratio = 1.0;
         //foot_ratio_interpolator->go(&tmp_ratio, dt*one_step_count, true);
         foot_ratio_interpolator->setGoal(&tmp_ratio, dt*one_step_count, true);
+        foot_midcoords_ratio = 0.0;
+        prev_foot_midcoords_ratio = 0.0;
         foot_ratio_interpolator->sync();
       };
       void clear_interpolators ( ) {
@@ -972,6 +975,34 @@ namespace rats
         if (sup_coords.size() > 0) multi_mid_coords(tmp_sup_mid, sup_coords);
         mid_coords(ret, static_cast<double>(sup_coords.size()) / (swg_coords.size() + sup_coords.size()), tmp_swg_mid, tmp_sup_mid);
       };
+      void get_dst_support_mid_coords(coordinates& ret) const
+      {
+        std::vector<coordinates> dst_coords, sup_coords;
+        for (std::vector<step_node>::const_iterator it_dst = swing_leg_dst_steps.begin();
+             it_dst != swing_leg_dst_steps.end();
+             it_dst++) {
+            if (it_dst->l_r == RLEG or it_dst->l_r == LLEG) dst_coords.push_back(it_dst->worldcoords);
+        }
+        for (std::vector<step_node>::const_iterator it = support_leg_steps.begin(); it != support_leg_steps.end(); it++) {
+            if (it->l_r == RLEG or it->l_r == LLEG) sup_coords.push_back(it->worldcoords);
+        }
+        coordinates tmp_dst_mid, tmp_sup_mid;
+        if (dst_coords.size() > 0) multi_mid_coords(tmp_dst_mid, dst_coords);
+        if (sup_coords.size() > 0) multi_mid_coords(tmp_sup_mid, sup_coords);
+        mid_coords(ret, static_cast<double>(sup_coords.size()) / (dst_coords.size() + sup_coords.size()), tmp_dst_mid, tmp_sup_mid);
+      };
+      void get_mid_coords_to_dst(coordinates& ret)
+      {
+          coordinates dst_sup_midcoords;
+          get_dst_support_mid_coords(dst_sup_midcoords);
+          if (prev_foot_midcoords_ratio < 1.0) {
+              mid_coords(ret, (foot_midcoords_ratio - prev_foot_midcoords_ratio) / (1.0 - prev_foot_midcoords_ratio), prev_mid_coords_to_dst, dst_sup_midcoords);
+          } else {
+              get_swing_support_mid_coords(ret);
+          }
+
+      };
+      void set_prev_mid_coords_to_dst(const coordinates& _prev_mid_coords_to_dst) { prev_mid_coords_to_dst = _prev_mid_coords_to_dst; };
       std::vector<leg_type> get_current_support_states () const
       {
           if ( is_swing_phase ) {
@@ -1005,6 +1036,8 @@ namespace rats
               return no_using_toe_heel_ratio;
           }
       };
+      double get_prev_foot_midcoords_ratio () const { return prev_foot_midcoords_ratio; };
+      double get_foot_midcoords_ratio () const { return foot_midcoords_ratio; };
     };
 
   class gait_generator
@@ -1419,6 +1452,9 @@ namespace rats
       return tmp;
     };
     void get_swing_support_mid_coords(coordinates& ret) const { lcg.get_swing_support_mid_coords(ret); };
+    void get_dst_support_mid_coords(coordinates& ret) const { lcg.get_dst_support_mid_coords(ret); };
+    void get_mid_coords_to_dst(coordinates& ret) { lcg.get_mid_coords_to_dst(ret); };
+    void set_prev_mid_coords_to_dst(const coordinates& _prev_mid_coords_to_dst) { lcg.set_prev_mid_coords_to_dst(_prev_mid_coords_to_dst); };
     void get_stride_parameters (double& _stride_fwd_x, double& _stride_y, double& _stride_theta, double& _stride_bwd_x) const
     {
       _stride_fwd_x = footstep_param.stride_fwd_x;
@@ -1482,6 +1518,8 @@ namespace rats
         }
         return true;
     };
+    double get_prev_foot_midcoords_ratio () const { return lcg.get_prev_foot_midcoords_ratio(); };
+    double get_foot_midcoords_ratio () const { return lcg.get_foot_midcoords_ratio(); };
     void get_leg_default_translate_pos (std::vector<hrp::Vector3>& off) const { off = footstep_param.leg_default_translate_pos; };
     size_t get_overwritable_footstep_index_offset () const { return overwritable_footstep_index_offset; };
     const std::vector<leg_type> calc_counter_leg_types_from_footstep_nodes (const std::vector<step_node>& fns, std::vector<std::string> _all_limbs) const;

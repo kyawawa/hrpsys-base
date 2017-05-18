@@ -654,7 +654,7 @@ void AutoBalancer::getTargetParameters()
     if ( gg_is_walking ) {
       gg->set_default_zmp_offsets(default_zmp_offsets);
       gg_solved = gg->proc_one_tick();
-      gg->get_swing_support_mid_coords(tmp_fix_coords);
+      gg->get_mid_coords_to_dst(tmp_fix_coords);
     } else {
       tmp_fix_coords = fix_leg_coords;
     }
@@ -664,6 +664,7 @@ void AutoBalancer::getTargetParameters()
     }
     // TODO : see explanation in this function
     fixLegToCoords2(tmp_fix_coords);
+    gg->set_prev_mid_coords_to_dst(tmp_fix_coords);
 
     // Get output parameters and target EE coords
     target_root_p = m_robot->rootLink()->p;

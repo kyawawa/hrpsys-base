@@ -442,6 +442,7 @@ namespace rats
   void leg_coords_generator::update_leg_steps (const std::vector< std::vector<step_node> >& fnsl, const double default_double_support_ratio_before, const double default_double_support_ratio_after, const toe_heel_type_checker& thtc)
   {
     if (!foot_ratio_interpolator->isEmpty()) {
+        prev_foot_midcoords_ratio = foot_midcoords_ratio;
         foot_ratio_interpolator->get(&foot_midcoords_ratio, true);
     }
 

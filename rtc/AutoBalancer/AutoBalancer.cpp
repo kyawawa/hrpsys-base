@@ -296,7 +296,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
     // RMC
     hrp::dvector6 Svec;
-    Svec << 1, 1, 1, 0, 0, 1;
+    Svec << 1, 1, 1, 0, 0, 0;
     rmc = rmcPtr(new rats::RMController(m_robot, Svec));
     // for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
     //     rmc->addConstraintLink(m_robot, it->second.target_link->name);
@@ -1133,14 +1133,14 @@ void AutoBalancer::solveFullbodyIK ()
       dif_cog(2) = m_robot->rootLink()->p(2) - target_root_p(2);
       hrp::Vector3 ref_basePos = m_robot->rootLink()->p + -1 * fik->move_base_gain * dif_cog;
       hrp::Matrix33 ref_baseRot = target_root_R;
-      hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog / m_dt;
-      std::cerr << "Pref: " << Pref.transpose() << std::endl;
+      hrp::Vector3 Pref = m_robot->totalMass() * -dif_cog;
       hrp::Vector3 Lref = hrp::Vector3::Zero();
-      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-          hrp::Matrix33 target_link_R(it->second.target_r0 * it->second.localR.transpose());
-          hrp::Matrix33 xi_ref_R(it->second.target_link->R.transpose() * target_link_R);
-          xi_ref[it->second.target_link->name].segment(0, 3) = ((it->second.target_p0 - target_link_R * it->second.localPos) - it->second.target_link->p) / m_dt;
-          xi_ref[it->second.target_link->name].segment(3, 3) = hrp::omegaFromRot(xi_ref_R) / m_dt;
+
+      for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); ++it ) {
+          hrp::Vector3 target_link_p = it->second.target_p0 - it->second.target_r0 * it->second.localR.transpose() * it->second.localPos;
+          hrp::Matrix33 xi_ref_R((it->second.target_link->R * it->second.localR).transpose() * it->second.target_r0);
+          xi_ref[it->second.target_link->name].segment(0, 3) = fik->ratio_for_vel * (target_link_p - it->second.target_link->p);
+          xi_ref[it->second.target_link->name].segment(3, 3) = fik->ratio_for_vel * hrp::omegaFromRot(xi_ref_R);
       }
       rmc->rmControl(m_robot, Pref, Lref, xi_ref, ref_basePos, ref_baseRot, m_dt);
   }

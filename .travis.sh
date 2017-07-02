@@ -384,6 +384,8 @@ case $TEST_PACKAGE in
                 travis_time_start $(echo $test_file | sed 's@.*/\([a-zA-Z0-9-]*\).test$@\1@' | sed 's@-@_@g')
                 export TMP_EXIT_STATUS=0
                 rostest $test_file && travis_time_end || export TMP_EXIT_STATUS=$?
+                cat $test_file
+                cat `dirname`/`basename $test_file .test`.py
                 if [ "$TMP_EXIT_STATUS" != 0 ]; then
                     export EXIT_STATUS=$TMP_EXIT_STATUS
                     # Print results of rostest-*.xml files

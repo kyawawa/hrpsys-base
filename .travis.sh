@@ -181,7 +181,7 @@ case $TEST_PACKAGE in
         travis_time_start  install_$TEST_PACKAGE
 
         pkg=$TEST_PACKAGE
-        sudo apt-get install -y python-wstool ros-indigo-catkin ros-indigo-mk ros-indigo-rostest ros-indigo-rtmbuild ros-indigo-roslint > /dev/null
+        sudo apt-get install -qq -y python-wstool python-catkin-tools ros-indigo-catkin ros-indigo-mk ros-indigo-rostest ros-indigo-rtmbuild ros-indigo-roslint > /dev/null
 
         sudo apt-get install -qq -y ros-indigo-pcl-ros ros-indigo-moveit-commander ros-indigo-rqt-robot-dashboard > /dev/null
 
@@ -220,10 +220,10 @@ case $TEST_PACKAGE in
 
             sudo dpkg -r --force-depends ros-indigo-hrpsys
 
-            catkin_make_isolated --install -j1 -l1
+            catkin build -j1
             # you need to pretend this is catkin package since you only have hrpsys in catkin_ws
-            export ROS_PACKAGE_PATH=`pwd`/install_isolated/share:`pwd`/install_isolated/stacks:$ROS_PACKAGE_PATH
-            source install_isolated/setup.bash
+            # export ROS_PACKAGE_PATH=`pwd`/install_isolated/share:`pwd`/install_isolated/stacks:$ROS_PACKAGE_PATH
+            source devel/setup.bash
 
             travis_time_end
         else
@@ -262,9 +262,10 @@ case $TEST_PACKAGE in
             travis_time_end
             travis_time_start  compile_new_version
 
-            catkin_make_isolated -j1 -l1 --install --only-pkg-with-deps `echo $pkg | sed s/-/_/g` | grep -v '^-- \(Up-to-date\|Installing\):' | grep -v 'Generating \(Python\|C++\) code from' | grep -v '^Compiling .*.py ...$' | uniq
-            rm -fr ./install_isolated/hrpsys/share/hrpsys ./install_isolated/hrpsys/lib/pkgconfig/hrpsys.pc
-            source install_isolated/setup.bash
+            # catkin_make_isolated -j1 -l1 --install --only-pkg-with-deps `echo $pkg | sed s/-/_/g` | grep -v '^-- \(Up-to-date\|Installing\):' | grep -v 'Generating \(Python\|C++\) code from' | grep -v '^Compiling .*.py ...$' | uniq
+            catkin build -j1 `echo $pkg | sed s/-/_/g` | grep -v '^-- \(Up-to-date\|Installing\):' | grep -v 'Generating \(Python\|C++\) code from' | grep -v '^Compiling .*.py ...$' | uniq
+            rm -fr ./devel/share/hrpsys ./devel/lib/pkgconfig/hrpsys.pc
+            source devel/setup.bash
 
             travis_time_end
             travis_time_start  setup_old_hrpsys
@@ -284,27 +285,27 @@ case $TEST_PACKAGE in
             sed -i "s@touch installed@@" hrpsys/Makefile.hrpsys-base
             cat hrpsys/Makefile.hrpsys-base
             # use git repository, instead of svn due to googlecode shoutdown
-            git clone http://github.com/fkanehiro/hrpsys-base --depth 1 -b 315.1.9 ../build_isolated/hrpsys/build/hrpsys-base-source
+            git clone http://github.com/fkanehiro/hrpsys-base --depth 1 -b 315.1.9 ../build/hrpsys/hrpsys-base-source
             # tmp fix to build old hrpsys
             sudo ln -s /usr/lib/x86_64-linux-gnu/libboost_thread.so /usr/lib/x86_64-linux-gnu/libboost_thread-mt.so
             sudo ln -s /usr/lib/x86_64-linux-gnu/libboost_system.so /usr/lib/x86_64-linux-gnu/libboost_system-mt.so
             # we use latest hrpsys_ocnfig.py for this case, so do not install them
-            sed -i -e 's/\(add_subdirectory(python)\)/#\1/' ../build_isolated/hrpsys/build/hrpsys-base-source/CMakeLists.txt
-            sed -i -e 's/\(add_subdirectory(test)\)/#\1/' ../build_isolated/hrpsys/build/hrpsys-base-source/CMakeLists.txt
-            find ../build_isolated/hrpsys/build/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@PCL_FOUND@0@" {} \; # disable PCL
-            find ../build_isolated/hrpsys/build/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@OCTOMAP_FOUND@0@" {} \; # disable OCTOMAP
-            find ../build_isolated/hrpsys/build/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@IRRLIGHT_FOUND@0@" {} \; # disable IRRLIGHT
-            sed -i "s@USE_HRPSYSUTIL@0@" ../build_isolated/hrpsys/build/hrpsys-base-source/rtc/CMakeLists.txt # disable HRPSYSUTIL APPs # this disables CollisionDetector
-            sed -i "\$aadd_subdirectory(CollisionDetector)" ../build_isolated/hrpsys/build/hrpsys-base-source/rtc/CMakeLists.txt
+            sed -i -e 's/\(add_subdirectory(python)\)/#\1/' ../build/hrpsys/hrpsys-base-source/CMakeLists.txt
+            sed -i -e 's/\(add_subdirectory(test)\)/#\1/' ../build/hrpsys/hrpsys-base-source/CMakeLists.txt
+            find ../build/hrpsys/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@PCL_FOUND@0@" {} \; # disable PCL
+            find ../build/hrpsys/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@OCTOMAP_FOUND@0@" {} \; # disable OCTOMAP
+            find ../build/hrpsys/hrpsys-base-source -name CMakeLists.txt -exec sed -i "s@IRRLIGHT_FOUND@0@" {} \; # disable IRRLIGHT
+            sed -i "s@USE_HRPSYSUTIL@0@" ../build/hrpsys/hrpsys-base-source/rtc/CMakeLists.txt # disable HRPSYSUTIL APPs # this disables CollisionDetector
+            sed -i "\$aadd_subdirectory(CollisionDetector)" ../build/hrpsys/hrpsys-base-source/rtc/CMakeLists.txt
 
-            sed -i "s@NOT QNXNTO@1@" ../build_isolated/hrpsys/build/hrpsys-base-source/rtc/CMakeLists.txt # disable Joystick
+            sed -i "s@NOT QNXNTO@1@" ../build/hrpsys/hrpsys-base-source/rtc/CMakeLists.txt # disable Joystick
 
-            sed -i "1imacro(dummy_macro)\nmessage(\"dummy(\${ARGN})\")\nendmacro()" ../build_isolated/hrpsys/build/hrpsys-base-source/util/simulator/CMakeLists.txt
-            sed -i "s@\(.*\)(hrpsysext@dummy_macro(hrpsysext@g" ../build_isolated/hrpsys/build/hrpsys-base-source/util/simulator/CMakeLists.txt
-            sed -i "s@install(TARGETS hrpsysext@dummy_macro(TARGETS hrpsysext@g" ../build_isolated/hrpsys/build/hrpsys-base-source/util/simulator/CMakeLists.txt
+            sed -i "1imacro(dummy_macro)\nmessage(\"dummy(\${ARGN})\")\nendmacro()" ../build/hrpsys/hrpsys-base-source/util/simulator/CMakeLists.txt
+            sed -i "s@\(.*\)(hrpsysext@dummy_macro(hrpsysext@g" ../build/hrpsys/hrpsys-base-source/util/simulator/CMakeLists.txt
+            sed -i "s@install(TARGETS hrpsysext@dummy_macro(TARGETS hrpsysext@g" ../build/hrpsys/hrpsys-base-source/util/simulator/CMakeLists.txt
 
-            cat ../build_isolated/hrpsys/build/hrpsys-base-source/CMakeLists.txt
-            cat ../build_isolated/hrpsys/build/hrpsys-base-source/rtc/CMakeLists.txt
+            cat ../build/hrpsys/hrpsys-base-source/CMakeLists.txt
+            cat ../build/hrpsys/hrpsys-base-source/rtc/CMakeLists.txt
 
             cd ~/hrpsys_ws
             ls -al src
@@ -316,7 +317,7 @@ case $TEST_PACKAGE in
             trap 0 ERR
             need_compile=1
             while [ $need_compile != 0 ]; do
-                catkin_make_isolated -j1 -l1 --merge
+                catkin build -j1
                 need_compile=$?
             done
             trap error ERR
@@ -327,21 +328,21 @@ case $TEST_PACKAGE in
             trap 0 ERR
             need_compile=1
             while [ $need_compile != 0 ]; do
-                catkin_make_isolated -j1 -l1 --install | grep -v '^-- \(Up-to-date\|Installing\):'
+                catkin build -j1 | grep -v '^-- \(Up-to-date\|Installing\):'
                 need_compile=${PIPESTATUS[0]}
             done
             trap error ERR
 
             #cp ~/catkin_ws/src/hrpsys/package.xml install_isolated/share/hrpsys/ # old hrpsys did not do this
-            mkdir -p install_isolated/share/hrpsys/share/hrpsys/
-            cp -r ~/catkin_ws/install_isolated/share/hrpsys/idl install_isolated/share/hrpsys/share/hrpsys/
-            cp -r ~/catkin_ws/install_isolated/share/hrpsys/{test,launch,samples} install_isolated/share/hrpsys/ # cp latest script
+            mkdir -p devel/share/hrpsys/share/hrpsys/
+            cp -r ~/catkin_ws/devel/share/hrpsys/idl devel/share/hrpsys/share/hrpsys/
+            cp -r ~/catkin_ws/devel/share/hrpsys/{test,launch,samples} devel/share/hrpsys/ # cp latest script
 
-            source install_isolated/setup.bash
+            source devel/setup.bash
 
             #echo $ROS_PACKAGE_PATH
             #export ROS_PACKAGE_PATH=`pwd`/install_isolated:$ROS_PACKAGE_PATH # for hrpsys (plane cmake)
-            ls -al install_isolated/share/hrpsys
+            ls -al devel/share/hrpsys
             rospack profile
             rospack find hrpsys
 
@@ -363,7 +364,7 @@ case $TEST_PACKAGE in
         travis_time_end
 
         # Check make test
-        (cd ~/catkin_ws/build_isolated/hrpsys/install && make test)
+        (cd ~/catkin_ws/build/hrpsys && make test)
         # Check rostest
         sudo /etc/init.d/omniorb4-nameserver stop || echo "stop omniserver just in case..."
         export EXIT_STATUS=0;

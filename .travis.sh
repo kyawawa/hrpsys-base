@@ -92,9 +92,9 @@ case $TEST_PACKAGE in
                 travis_time_end
                 travis_time_start  iob_test
 
-                wget https://github.com/fkanehiro/hrpsys-base/raw/315.1.9/lib/io/iob.h -O iob.h.315.1.9
+                wget https://github.com/fkanehiro/hrpsys-base/raw/315.2.4/lib/io/iob.h -O iob.h.315.2.4
                 echo -e "#define pid_t int\n#define size_t int\n#include \"lib/io/iob.h\""  | cproto -x - | sort > iob.h.current
-                echo -e "#define pid_t int\n#define size_t int\n#include \"iob.h.315.1.9\"" | cproto -x - | sort > iob.h.stable
+                echo -e "#define pid_t int\n#define size_t int\n#include \"iob.h.315.2.4\"" | cproto -x - | sort > iob.h.stable
                 cat iob.h.current
                 cat iob.h.stable
                 diff iob.h.stable iob.h.current || exit 1
@@ -122,7 +122,7 @@ case $TEST_PACKAGE in
                 ## check idl
                 mkdir stable_idl
                 for idl_file in SequencePlayerService.idl StateHolderService.idl ForwardKinematicsService.idl CollisionDetectorService.idl SoftErrorLimiterService.idl DataLoggerService.idl   ExecutionProfileService.idl HRPDataTypes.idl RobotHardwareService.idl ; do
-                    wget https://github.com/fkanehiro/hrpsys-base/raw/315.1.9/idl/${idl_file} -O stable_idl/${idl_file}
+                    wget https://github.com/fkanehiro/hrpsys-base/raw/315.2.4/idl/${idl_file} -O stable_idl/${idl_file}
                     omniidl -bcxx -I/opt/ros/indigo/include/openrtm-1.1/rtm/idl/                      idl/${idl_file}
                     omniidl -bcxx -I/opt/ros/indigo/include/openrtm-1.1/rtm/idl/ -C stable_idl stable_idl/${idl_file}
                     sk_file=$(basename ${idl_file} .idl)SK.cc
@@ -273,7 +273,7 @@ case $TEST_PACKAGE in
             mkdir -p ~/hrpsys_ws/src
             cd ~/hrpsys_ws/src
             wstool init .
-            wstool set hrpsys http://github.com/start-jsk/hrpsys -v 315.1.9 --git -y
+            wstool set hrpsys http://github.com/start-jsk/hrpsys -v 315.2.4 --git -y
             wstool update
             #
             sed -i "1imacro(dummy_macro)\nmessage(\"dummy(\${ARGN})\")\nendmacro()" hrpsys/catkin.cmake
@@ -284,7 +284,7 @@ case $TEST_PACKAGE in
             sed -i "s@touch installed@@" hrpsys/Makefile.hrpsys-base
             cat hrpsys/Makefile.hrpsys-base
             # use git repository, instead of svn due to googlecode shoutdown
-            git clone http://github.com/fkanehiro/hrpsys-base --depth 1 -b 315.1.9 ../build_isolated/hrpsys/build/hrpsys-base-source
+            git clone http://github.com/fkanehiro/hrpsys-base --depth 1 -b 315.2.4 ../build_isolated/hrpsys/build/hrpsys-base-source
             # tmp fix to build old hrpsys
             sudo ln -s /usr/lib/x86_64-linux-gnu/libboost_thread.so /usr/lib/x86_64-linux-gnu/libboost_thread-mt.so
             sudo ln -s /usr/lib/x86_64-linux-gnu/libboost_system.so /usr/lib/x86_64-linux-gnu/libboost_system-mt.so

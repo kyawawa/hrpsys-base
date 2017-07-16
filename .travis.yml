@@ -1,13 +1,14 @@
 cache: apt
 language:
-  - cpp
+  - c++
   - python
 python:
   - "2.7"
 compiler:
   - gcc
-notifications:
-  slack: jsk-robotics:Av7tc8wj3IWkLYvlTzHE7x2g
+# notifications:
+#   slack: jsk-robotics:Av7tc8wj3IWkLYvlTzHE7x2g
+sudo: required
 dist: trusty
   # TEST_TYPE:
   #        1 : Check if this PR works with current downstream package
@@ -57,8 +58,3 @@ after_success:
   - if [ "$TRAVIS_PULL_REQUEST" == "false" -a "$TRAVIS_BRANCH" == "master" -a "$TEST_PACKAGE" == "hrpsys" -a "$TEST_TYPE" == "" ]; then git branch -m gh-pages; fi
   - if [ "$TRAVIS_PULL_REQUEST" == "false" -a "$TRAVIS_BRANCH" == "master" -a "$TEST_PACKAGE" == "hrpsys" -a "$TEST_TYPE" == "" ]; then git remote -v; fi
   - if [ "$TRAVIS_PULL_REQUEST" == "false" -a "$TRAVIS_BRANCH" == "master" -a "$TEST_PACKAGE" == "hrpsys" -a "$TEST_TYPE" == "" ]; then git push -f --quiet https://$GH_TOKEN@github.com/$TRAVIS_REPO_SLUG.git gh-pages; fi
-
-
-
-
-

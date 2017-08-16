@@ -170,7 +170,7 @@ case $TEST_PACKAGE in
 
                 cd ~/build && cmake ${CI_SOURCE_PATH} ${COMPILE_OPTION} && make
                 # Check make test by passing PATH to bin directory
-                PATH=$PATH:~/build/bin make test
+                PATH=$PATH:~/build/bin env CTEST_OUTPUT_ON_FAILURE=1 make test
 
                 travis_time_end
                 ;;

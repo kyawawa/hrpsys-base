@@ -34,10 +34,15 @@ protected:
         }
         nameServer = nameServer.substr(0, comPos);
         RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
+        std::cerr << "before fork" << std::endl;
         pid_t pid = fork();
+        std::cerr << "after fork" << std::endl;
         if (pid == 0) {
+            std::cerr << "exec openhrp-model-loader" << std::endl;
             execlp("openhrp-model-loader", "openhrp-model-loader", NULL);
+            std::cerr << "execed openhrp-model-loader" << std::endl;
         } else if (pid > 0) {
+            std::cerr << "sleep" << std::endl;
             sleep(1);
             if (!loadBodyFromModelLoader(m_robot, file_path,
                                          CosNaming::NamingContext::_duplicate(naming.getRootContext()))) {

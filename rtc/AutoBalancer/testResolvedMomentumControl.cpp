@@ -28,12 +28,15 @@ protected:
     {
         std::cerr << "loadModel" << std::endl;
         RTC::Manager& rtcManager = RTC::Manager::instance();
+        std::cerr << "1" << std::endl;
         std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
+        std::cerr << "2" << std::endl;
         int comPos = nameServer.find(",");
-        if (comPos < 0){
+        if (comPos < 0) {
             comPos = nameServer.length();
         }
         nameServer = nameServer.substr(0, comPos);
+        std::cerr << "3" << std::endl;
         RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
         std::cerr << "before fork" << std::endl;
         pid_t pid = fork();

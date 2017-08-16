@@ -26,6 +26,7 @@ protected:
 
     void loadModel(const char *file_path)
     {
+        std::cerr << "loadModel" << std::endl;
         RTC::Manager& rtcManager = RTC::Manager::instance();
         std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
         int comPos = nameServer.find(",");
@@ -596,6 +597,7 @@ public:
     testResolvedMomentumControlSampleRobot ()
     {
         dt = 0.004;
+        std::cerr << "end_effectors" << std::endl;
         end_effectors["rleg"] = "RLEG_ANKLE_R";
         end_effectors["lleg"] = "LLEG_ANKLE_R";
         end_effectors["rarm"] = "RARM_WRIST_P";

@@ -37,25 +37,36 @@ protected:
         }
         nameServer = nameServer.substr(0, comPos);
         std::cerr << "3" << std::endl;
-        RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-        std::cerr << "before fork" << std::endl;
-        pid_t pid = fork();
-        std::cerr << "after fork" << std::endl;
+        pid_t pid, pid_child;
+        pid = fork();
         if (pid == 0) {
-            std::cerr << "exec openhrp-model-loader" << std::endl;
-            execlp("openhrp-model-loader", "openhrp-model-loader", NULL);
-            std::cerr << "execed openhrp-model-loader" << std::endl;
+            std::cerr << "start omni" << std::endl;
+            // execlp("`pkg-config hrpsys-base --variable=prefix`/share/hrpsys/test/start_omninames.sh", "`pkg-config hrpsys-base --variable=prefix`/share/hrpsys/test/start_omninames.sh", NULL);
+            execlp("/home/ishikawa/ros/parent/devel/share/hrpsys/test/start_omninames.sh", "/home/ishikawa/ros/parent/devel/share/hrpsys/test/start_omninames.sh", NULL);
         } else if (pid > 0) {
-            std::cerr << "sleep" << std::endl;
             sleep(1);
-            if (!loadBodyFromModelLoader(m_robot, file_path,
-                                         CosNaming::NamingContext::_duplicate(naming.getRootContext()))) {
-                std::cerr << "Failed to load model"  << std::endl;
-                std::cerr << "Please check if openhrp-model-loader is running"  << std::endl;
+            std::cerr << "naming" << std::endl;
+            RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
+            pid_child = fork();
+            if (pid_child == 0) {
+                execlp("openhrp-model-loader", "openhrp-model-loader", NULL);
+            } else if (pid_child > 0) {
+                sleep(1);
+                if (!loadBodyFromModelLoader(m_robot, file_path,
+                                             CosNaming::NamingContext::_duplicate(naming.getRootContext()))) {
+                    std::cerr << "Failed to load model"  << std::endl;
+                    std::cerr << "Please check if openhrp-model-loader is running"  << std::endl;
+                    kill(pid_child, SIGINT);
+                    kill(pid, SIGINT);
+                    exit(1);
+                }
+                kill(pid_child, SIGINT);
+                kill(pid, SIGINT);
+            } else {
+                std::cerr << "fork failed" << std::endl;
                 kill(pid, SIGINT);
                 exit(1);
             }
-            kill(pid, SIGINT);
         } else {
             std::cerr << "fork failed" << std::endl;
             exit(1);

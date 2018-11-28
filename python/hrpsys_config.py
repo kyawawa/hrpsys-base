@@ -258,6 +258,11 @@ class HrpsysConfigurator(object):
     rfu_svc = None
     rfu_version = None
 
+    # Balancer
+    ba = None
+    ba_svc = None
+    ba_version = None
+
     # Acceleration Filter
     acf = None
     acf_svc = None
@@ -439,6 +444,9 @@ class HrpsysConfigurator(object):
                 if self.rfu:
                     connectPorts(self.sh.port(sen+"Out"),
                                  self.rfu.port("ref_" + sen+"In"))
+                if self.ba:
+                    connectPorts(self.sh.port(sen+"Out"),
+                                 self.ba.port("ref_" + sen+"In"))
 
         #  actual force sensors
         if self.rmfo:
@@ -454,6 +462,9 @@ class HrpsysConfigurator(object):
                 if self.rfu:
                     connectPorts(self.rmfo.port("off_" + sen.name),
                                  self.rfu.port(sen.name))
+                if self.ba:
+                    connectPorts(self.rmfo.port("off_" + sen.name),
+                                 self.ba.port(sen.name))
                 if self.st:
                     connectPorts(self.rmfo.port("off_" + sen.name),
                                  self.st.port(sen.name))
@@ -475,6 +486,15 @@ class HrpsysConfigurator(object):
             if StrictVersion(self.seq_version) >= StrictVersion('315.3.0'):
                 connectPorts(self.sh.port("basePosOut"), self.rfu.port("basePosIn"))
                 connectPorts(self.sh.port("baseRpyOut"), self.rfu.port("baseRpyIn"))
+        # connections for balancer
+        if self.ba:
+            connectPorts(self.kf.port("rpy"), self.ba.port("rpy"))
+            connectPorts(self.rh.port("q"), self.ba.port("qCurrent"))
+            if self.es:
+                connectPorts(self.es.port("q"), self.ba.port("qRef"))
+            if StrictVersion(self.seq_version) >= StrictVersion('315.3.0'):
+                connectPorts(self.sh.port("basePosOut"), self.ba.port("basePosIn"))
+                connectPorts(self.sh.port("baseRpyOut"), self.ba.port("baseRpyIn"))
         # connection for tf
         if self.tf:
             # connection for actual torques
@@ -752,6 +772,7 @@ class HrpsysConfigurator(object):
             ['ic', "ImpedanceController"],
             ['abc', "AutoBalancer"],
             ['st', "Stabilizer"],
+            ['ba', "Balancer"],
             ['co', "CollisionDetector"],
             ['tc', "TorqueController"],
             ['te', "ThermoEstimator"],
@@ -921,6 +942,9 @@ class HrpsysConfigurator(object):
         if self.rfu != None:
             for sen in filter(lambda x: x.type == "Force", self.sensors):
                 self.connectLoggerPort(self.rfu, "ref_"+sen.name+"Out")
+        if self.ba != None:
+            for sen in filter(lambda x: x.type == "Force", self.sensors):
+                self.connectLoggerPort(self.ba, "ref_"+sen.name+"Out")
         if self.octd != None:
             self.connectLoggerPort(self.octd, "octdData")
         self.log_svc.clear()

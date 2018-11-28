@@ -1,0 +1,67 @@
+/**
+ * @file BalancerService.idl
+ * @brief Services for the reference force updater interface
+ */
+module OpenHRP
+{
+  interface BalancerService
+  {
+      typedef sequence<double, 3> DblSequence3;
+      typedef sequence<string> StrSequence;
+
+      /**
+       * @struct BalancerParam
+       * @brief Balancer Parameters.
+       */
+      struct BalancerParam
+      {
+          /// Motion direction to update reference force
+          DblSequence3 motion_dir;
+          /// frame of motion_dir ("local" or "world").
+          /// "local" is coordinate at end effector, and "world" is the coordinate between the feet.
+          string frame;
+          /// Update frequency [Hz]
+          double update_freq;
+          /// Update time ratio \in [0,1]
+          double update_time_ratio;
+          /// P gain
+          double p_gain;
+          /// D gain
+          double d_gain;
+          /// I gain
+          double i_gain;
+          /// Hold current value or not. If is_hold_value is true, do not update value, otherwise, update value.
+          boolean is_hold_value;
+          /// Transition time[s]
+          double transition_time;
+          /// Cutoff frequency for actual force value [Hz]
+          double cutoff_freq;
+      };
+
+      /**
+       * @brief Set Balancer parameters
+       * @param i_param is input parameter
+       * @return true if set successfully, false otherwise
+       */
+      boolean setBalancerParam(in BalancerParam i_param);
+
+      /**
+       * @brief Get Balancer parameters
+       * @param i_param is input parameter
+       * @return true if set successfully, false otherwise
+       */
+      boolean getBalancerParam(out BalancerParam i_param);
+
+      /**
+       * @brief Start Balancer
+       * @return true if set successfully, false otherwise
+       */
+      boolean startBalancer();
+
+      /**
+       * @brief Stop Balancer
+       * @return true if set successfully, false otherwise
+       */
+      boolean stopBalancer();
+  };
+};

@@ -19,15 +19,18 @@
 #include <rtm/DataOutPort.h>
 #include <rtm/idl/BasicDataTypeSkel.h>
 #include <rtm/idl/ExtendedDataTypesSkel.h>
-#include <hrpModel/Body.h>
-#include "../ImpedanceController/JointPathEx.h"
-#include "../ImpedanceController/RatsMatrix.h"
-#include "../SequencePlayer/interpolator.h"
-#include "../TorqueFilter/IIRFilter.h"
-#include <boost/shared_ptr.hpp>
+// #include <hrpModel/Body.h>
+// #include "../ImpedanceController/JointPathEx.h"
+// #include "../ImpedanceController/RatsMatrix.h"
+// #include "../SequencePlayer/interpolator.h"
+// #include "../TorqueFilter/IIRFilter.h"
 
-// #include "ImpedanceOutputGenerator.h"
-// #include "ObjectTurnaroundDetector.h"
+#include <memory>
+#include <cnoid/Body>
+#include <cnoid/JointPath>
+#include <cnoid/EigenTypes>
+#include "util/Kinematics.h"
+
 // Service implementation headers
 // <rtc-template block="service_impl_h">
 #include "BalancerService_impl.h"
@@ -109,9 +112,11 @@ class Balancer
     bool setBalancerParam(const OpenHRP::BalancerService::BalancerParam& i_param);
     bool getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_param);
     void getCurrentStates();
-    void calcFootOriginCoords (hrp::Vector3& foot_origin_pos, hrp::Matrix33& foot_origin_rot);
+    bool setIKLimbAsDefault();
+    void calcFootOriginCoords (cnoid::Vector3& foot_origin_pos, cnoid::Matrix3& foot_origin_rot);
     bool startBalancer();
     bool stopBalancer();
+    bool startJump(const double height, const double squat = 0.0);
 
   protected:
     // Configuration variable declaration
@@ -135,8 +140,6 @@ class Balancer
     std::vector<RTC::InPort<RTC::TimedDoubleSeq> *> m_ref_forceIn;
     RTC::TimedOrientation3D m_rpy;
     RTC::InPort<RTC::TimedOrientation3D> m_rpyIn;
-    RTC::TimedPoint3D m_diffFootOriginExtMoment;
-    // RTC::InPort<RTC::TimedPoint3D> m_diffFootOriginExtMomentIn;
 
     // </rtc-template>
 
@@ -165,29 +168,40 @@ class Balancer
   private:
     unsigned m_debugLevel;
     coil::Mutex m_mutex;
-    hrp::BodyPtr m_robot;
     double m_dt;
     unsigned loop; //counter in onExecute
-    struct IKParam {
+    cnoid::BodyPtr ioBody;
+    std::vector<cnoid::Vector3> act_force;
+
+    struct EEIKParam {
         std::string target_name; // Name of end link
-        std::string ee_name; // Name of ee (e.g., rleg, lleg, ...)
+        std::string ee_name; // Name of end effector (e.g., rleg, lleg, ...)
         std::string sensor_name; // Name of force sensor in the limb
         std::string parent_name; // Name of parent ling in the limb
+        cnoid::Position localTrans;
+        cnoid::Position target_trans;
     };
-    struct ee_trans {
-        std::string target_name, sensor_name;
-        hrp::Vector3 localPos;
-        hrp::Matrix33 localR;
-    };
-    std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
-    std::map<std::string, ee_trans> ee_map;
-    std::map<std::string, size_t> ee_index_map;
-    std::vector<IKParam> ikparams;
-    hrp::Matrix33 foot_origin_rot;
-    bool use_sh_base_pos_rpy;
-    const std::string footoriginextmoment_name, objextmoment0_name;
-};
 
+    struct EETrans {
+        std::string target_name, sensor_name;
+        cnoid::JointPathPtr ee_path;
+        cnoid::Position local_trans;
+    };
+
+    std::vector<EETrans> ee_trans_vec;
+
+    cnoid::Vector3 target_com_pos;
+    cnoid::Vector3 target_com_ang_vel;
+    std::vector<cnoid::Position> target_ee;
+    std::vector<IKParam> ik_params;
+
+    // States
+    bool is_jumping;
+
+    // std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
+    cnoid::Matrix3 foot_origin_rot;
+    bool use_sh_base_pos_rpy;
+};
 
 extern "C"
 {

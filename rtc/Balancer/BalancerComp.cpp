@@ -12,7 +12,6 @@
 #include <string>
 #include "Balancer.h"
 
-
 void MyModuleInit(RTC::Manager* manager)
 {
     BalancerInit(manager);

@@ -8,22 +8,23 @@
  */
 
 #include <rtm/CorbaNaming.h>
-#include <hrpModel/Link.h>
-#include <hrpModel/Sensor.h>
-#include <hrpModel/ModelLoaderUtil.h>
-#include <hrpModel/JointPath.h>
-#include <hrpUtil/MatrixSolvers.h>
+#include <iomanip>
+// #include "hrpsys/util/VectorConvert.h"
 #include "hrpsys/util/Hrpsys.h"
-#include <boost/assign.hpp>
 #include "Balancer.h"
-#include "hrpsys/util/VectorConvert.h"
+#include <cnoid/BodyLoader>
+#include <cnoid/ForceSensor>
+#include <cnoid/EigenUtil>
+#include <cnoid/Referenced>
+#include "util/Interpolator.h"
 
-typedef coil::Guard<coil::Mutex> Guard;
+using Guard = coil::Guard<coil::Mutex>;
+using BodyPtrWeak = cnoid::weak_ref_ptr<cnoid::Body>;
 
 namespace {
-static inline bool eps_eq(const double a, const double b, const double eps = 1e-3) { return std::abs(a - b) <= eps; };
+constexpr double G_ACC = -9.80665;
+inline bool eps_eq(const double a, const double b, const double eps = 1e-3) { return std::abs(a - b) <= eps; };
 }
-
 // Module specification
 // <rtc-template block="module_spec">
 static const char* Balancer_spec[] =
@@ -105,54 +106,68 @@ RTC::ReturnCode_t Balancer::onInitialize()
     // Get dt
     RTC::Properties& prop = getProperties(); // get properties information from .wrl file
     coil::stringTo(m_dt, prop["dt"].c_str());
-    std::cerr << "m_dt: " << m_dt << std::endl;
+    std::cerr << "dt: " << m_dt << std::endl;
 
-    // Make m_robot instance
-    m_robot = hrp::BodyPtr(new hrp::Body());
-    RTC::Manager& rtcManager = RTC::Manager::instance();
-    std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
-    std::cerr << "nameServer: " << nameServer << std::endl;
-    int comPos = nameServer.find(",");
-    if (comPos < 0) comPos = nameServer.length();
-    nameServer = nameServer.substr(0, comPos);
-    std::cerr << "VRML: " << prop["model"] << std::endl;
-    RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-    if (!loadBodyFromModelLoader(m_robot, prop["model"].c_str(), // load robot model for m_robot
-                                 CosNaming::NamingContext::_duplicate(naming.getRootContext()))) {
-        std::cerr << "[" << m_profile.instance_name << "] failed to load model[" << prop["model"] << "]" << std::endl;
-        return RTC::RTC_ERROR;
+    // Load Model File
+    {
+        cnoid::BodyLoader bodyLoader;
+        std::string model_file = prop["model"];
+        std::string erage_str = "file://";
+        size_t pos = model_file.find(erage_str);
+        if (pos != std::string::npos) model_file.erase(pos, erage_str.length());
+        std::cerr << "model: " << model_file << std::endl;
+        ioBody = bodyLoader.load(model_file);
+        if (!ioBody) {
+            std::cerr << "[" << m_profile.instance_name << "] failed to load model[" << prop["model"] << "]" << std::endl;
+            return RTC::RTC_ERROR;
+        }
     }
 
-    // check if the dof of m_robot match the number of joint in m_robot
-    unsigned dof = m_robot->numJoints();
-    for (unsigned i = 0; i < dof; i++) {
-        if (i != m_robot->joint(i)->jointId) {
-            std::cerr << "[" << m_profile.instance_name << "] jointId is not equal to the index number" << std::endl;
-            return RTC::RTC_ERROR;
+    // RTC::Manager& rtcManager = RTC::Manager::instance();
+    // std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
+    // int comPos = nameServer.find(",");
+    // if (comPos < 0){
+    //     comPos = nameServer.length();
+    // }
+    // nameServer = nameServer.substr(0, comPos);
+    // RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
+
+    {
+        // check if the dof of ioBody match the number of joint in ioBody
+        int dof = ioBody->numJoints();
+        for (int i = 0; i < dof; i++) {
+            if (i != ioBody->joint(i)->jointId()) {
+                std::cerr << "[" << m_profile.instance_name << "] jointId is not equal to the index number" << std::endl;
+                return RTC::RTC_ERROR;
+            }
         }
     }
 
     // Setting for wrench data ports (real + virtual)
     std::vector<std::string> fsensor_names;
     // find names for real force sensors
-    unsigned num_physical_fsensors = m_robot->numSensors(hrp::Sensor::FORCE);
-    for (int i = 0; i < num_physical_fsensors; i++) {
-        fsensor_names.push_back(m_robot->sensor(hrp::Sensor::FORCE, i)->name);
+    auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
+    fsensor_names.reserve(fsensors.size());
+    for (const auto& fsensor : fsensors) {
+        fsensor_names.push_back(fsensor->name());
     }
-    // load virtual force sensors
-    readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
-    unsigned num_virtual_fsensors = m_vfs.size();
-    for (int i = 0; i < num_virtual_fsensors; i++) {
-        for (auto it = m_vfs.begin(); it != m_vfs.end(); it++) {
-            if (it->second.id == i) fsensor_names.push_back(it->first);
-        }
-    }
+    // TODO
+    // // load virtual force sensors
+    // readVirtualForceSensorParamFromProperties(m_vfs, ioBody, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
+    // unsigned num_virtual_fsensors = m_vfs.size();
+    // for (int i = 0; i < num_virtual_fsensors; i++) {
+    //     for (auto it = m_vfs.begin(); it != m_vfs.end(); it++) {
+    //         if (it->second.id == i) fsensor_names.push_back(it->first);
+    //     }
+    // }
+
     // add ports for all force sensors
-    unsigned num_fsensors  = num_physical_fsensors + num_virtual_fsensors;
+    size_t num_fsensors  = fsensor_names.size();
     m_force.resize(num_fsensors);
     m_forceIn.resize(num_fsensors);
+    act_force.resize(num_fsensors);
     std::cerr << "[" << m_profile.instance_name << "] create force sensor ports" << std::endl;
-    for (unsigned i = 0; i < num_fsensors; ++i) {
+    for (size_t i = 0; i < num_fsensors; ++i) {
         // actual inport
         m_forceIn[i] = new RTC::InPort<RTC::TimedDoubleSeq>(fsensor_names[i].c_str(), m_force[i]);
         m_force[i].data.length(6);
@@ -171,53 +186,65 @@ RTC::ReturnCode_t Balancer::onInitialize()
             coil::stringTo(ee_target, end_effectors_str[i*prop_num+1].c_str());
             coil::stringTo(ee_base, end_effectors_str[i*prop_num+2].c_str());
 
-            ee_trans ee_local_trans;
-            for (size_t j = 0; j < 3; j++) {
-                coil::stringTo(ee_local_trans.localPos(j), end_effectors_str[i*prop_num+3+j].c_str());
+            // EETrans ee_local_trans;
+            EETrans ee_local_trans;
+            {
+                cnoid::Vector3 local_pos;
+                for (size_t j = 0; j < 3; j++) {
+                    coil::stringTo(local_pos(j), end_effectors_str[i*prop_num+3+j].c_str());
+                }
+                ee_local_trans.local_trans.translation() = local_pos;
             }
             {
                 double rotation_vector[4]; // rotation in VRML is represented by axis + angle
-                for (size_t j = 0; j < 4; ++j) coil::stringTo(rotation_vector[j], end_effectors_str[i*prop_num+6+j].c_str());
-                ee_local_trans.localR = Eigen::AngleAxis<double>(
-                    rotation_vector[3], hrp::Vector3(rotation_vector[0], rotation_vector[1], rotation_vector[2])).toRotationMatrix();
+                for (size_t j = 0; j < 4; ++j)
+                    coil::stringTo(rotation_vector[j], end_effectors_str[i*prop_num+6+j].c_str());
+                ee_local_trans.local_trans.linear() =
+                    Eigen::AngleAxisd(rotation_vector[3],
+                                      cnoid::Vector3(rotation_vector[0],
+                                                     rotation_vector[1],
+                                                     rotation_vector[2])).toRotationMatrix();
             }
 
             ee_local_trans.target_name = ee_target;
+            ee_local_trans.ee_path = std::make_shared<cnoid::JointPath>(ioBody->rootLink(), ioBody->link(ee_target));
+
             {
                 bool is_ee_exists = false;
-                for (size_t j = 0; j < num_fsensors; j++) {
-                    hrp::Sensor* sensor = m_robot->sensor(hrp::Sensor::FORCE, j);
-                    hrp::Link* alink = m_robot->link(ee_target);
-                    while (alink != NULL && alink->name != ee_base && !is_ee_exists) {
-                        if (alink->name == sensor->link->name) {
+                // TODO: virtual force sensor
+                for (const auto& fsensor : fsensors) {
+                    cnoid::Link* alink = ioBody->link(ee_target);
+                    while (alink != NULL && alink->name() != ee_base && !is_ee_exists) {
+                        if (alink->name() == fsensor->link()->name()) {
                             is_ee_exists = true;
-                            ee_local_trans.sensor_name = sensor->name;
+                            ee_local_trans.sensor_name = fsensor->name();
                         }
-                        alink = alink->parent;
+                        alink = alink->parent();
                     }
                 }
             }
-            ee_map.insert(std::pair<std::string, ee_trans>(ee_name , ee_local_trans));
+            ee_trans_vec.push_back(ee_local_trans);
 
-            ee_index_map.insert(std::pair<std::string, size_t>(ee_name, i));
             std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "]" << ee_target << " " << ee_base << std::endl;
             std::cerr << "[" << m_profile.instance_name << "]   target = " << ee_target << ", base = " << ee_base << ", sensor_name = " << ee_local_trans.sensor_name << std::endl;
-            std::cerr << "[" << m_profile.instance_name << "]   localPos = " << ee_local_trans.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
-            std::cerr << "[" << m_profile.instance_name << "]   localR = " << ee_local_trans.localR.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "    [", "]")) << std::endl;
+            // std::cerr << "[" << m_profile.instance_name << "]   localPos = " << ee_local_trans.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
+            // std::cerr << "[" << m_profile.instance_name << "]   localR = " << ee_local_trans.localR.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "    [", "]")) << std::endl;
         }
     }
 
-    hrp::Sensor* sensor = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-    if (sensor == NULL) {
-        std::cerr << "[" << m_profile.instance_name
-                  << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
-                  << std::endl;
-    }
+    target_ee.resize(end_effectors_str.size());
+    // Reserve IK Parameter Vector
+    ik_params.reserve(end_effectors_str.size() + 2); // EE + COM Pos + COM Ang Vel
+
+    // hrp::Sensor* sensor = ioBody->sensor<hrp::RateGyroSensor>("gyrometer");
+    // if (sensor == NULL) {
+    //     std::cerr << "[" << m_profile.instance_name
+    //               << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
+    //               << std::endl;
+    // }
 
     return RTC::RTC_OK;
 }
-
-
 
 RTC::ReturnCode_t Balancer::onFinalize()
 {
@@ -276,8 +303,8 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         m_qRefIn.read();
     }
 
-    //syncronize m_robot to the real robot
-    if (m_qRef.data.length() ==  m_robot->numJoints()) {
+    //syncronize ioBody to the real robot
+    if (m_qRef.data.length() ==  ioBody->numJoints()) {
         Guard guard(m_mutex);
 
         // Get current states
@@ -285,10 +312,10 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
 
         // Get force sensor values
         // Force sensor's force value is absolute in reference frame
+        auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
         for (size_t i = 0; i < m_force.size(); ++i) {
-            hrp::Sensor* sensor = m_robot->sensor(hrp::Sensor::FORCE, i);
-            hrp::Vector3 act_force = (sensor->link->R * sensor->localR) *
-                hrp::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
+            act_force[i] = fsensors[i]->link()->R() * fsensors[i]->R_local() *
+                cnoid::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
         }
     }
 
@@ -308,46 +335,113 @@ bool Balancer::getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_pa
 void Balancer::getCurrentStates()
 {
     // reference model
-    for (unsigned i = 0; i < m_robot->numJoints(); i++) {
-        m_robot->joint(i)->q = m_qRef.data[i];
+    for (unsigned i = 0; i < ioBody->numJoints(); i++) {
+        ioBody->joint(i)->q() = m_qRef.data[i];
     }
-    m_robot->rootLink()->p = hrp::Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
-    m_robot->rootLink()->R = hrp::rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
-    m_robot->calcForwardKinematics();
+    ioBody->rootLink()->p() = cnoid::Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
+    ioBody->rootLink()->R() = cnoid::rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
+    ioBody->calcForwardKinematics();
 
-    hrp::Vector3 foot_origin_pos;
+    cnoid::Vector3 foot_origin_pos;
+    cnoid::Matrix3 foot_origin_rot;
     calcFootOriginCoords(foot_origin_pos, foot_origin_rot);
-
-    // for (size_t i = 0; i < ikparams.size(); i++) {
-    //     hrp::Link* target = m_robot->link(ikparams[i].target_name);
-    //     // target_ee_p[i] = target->p + target->R * ikparams[i].localp;
-    //     // target_ee_R[i] = target->R * ikparams[i].localR;
-    // }
 }
 
-void Balancer::calcFootOriginCoords (hrp::Vector3& foot_origin_pos, hrp::Matrix33& foot_origin_rot)
+bool Balancer::setIKLimbAsDefault()
 {
-  rats::coordinates leg_c[2], tmpc;
-  hrp::Vector3 ez = hrp::Vector3::UnitZ();
-  hrp::Vector3 ex = hrp::Vector3::UnitX();
-  size_t i = 0;
-  for (std::map<std::string, ee_trans>::iterator itr = ee_map.begin(); itr != ee_map.end(); itr++ ) {
-      if (itr->first.find("leg") == std::string::npos) continue;
-      hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(itr->second.sensor_name)->link;
-      leg_c[i].pos = target->p;
-      hrp::Vector3 xv1(target->R * ex);
-      xv1(2)=0.0;
-      xv1.normalize();
-      hrp::Vector3 yv1(ez.cross(xv1));
-      leg_c[i].rot(0,0) = xv1(0); leg_c[i].rot(1,0) = xv1(1); leg_c[i].rot(2,0) = xv1(2);
-      leg_c[i].rot(0,1) = yv1(0); leg_c[i].rot(1,1) = yv1(1); leg_c[i].rot(2,1) = yv1(2);
-      leg_c[i].rot(0,2) = ez(0); leg_c[i].rot(1,2) = ez(1); leg_c[i].rot(2,2) = ez(2);
-      i++;
-  }
-  // Only double support is assumed
-  rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
-  foot_origin_pos = tmpc.pos;
-  foot_origin_rot = tmpc.rot;
+    {
+        const size_t cap = ik_params.capacity();
+        ik_params.clear();
+        ik_params.reserve(cap);
+    }
+
+    // COM Position
+    {
+        IKParam com_ik;
+        com_ik.target_type = ik_trans;
+        // com_ik.calcJacobian = [ioBodyWeak = BodyPtrWeak(ioBody)]()
+        com_ik.calcJacobian = [this]()
+            {
+                Eigen::MatrixXd J;
+                cnoid::calcCMJacobian(this->ioBody, nullptr, J);
+                return J;
+            };
+        com_ik.calcError = [this]()
+            {
+                return this->target_com_pos - this->ioBody->centerOfMass();
+            };
+        ik_params.push_back(std::move(com_ik));
+   }
+
+    // COM Angular Velocity
+    {
+        IKParam com_ang;
+        com_ang.target_type = ik_axisrot; // Angular Vel
+        com_ang.calcJacobian = [this]()
+            {
+                Eigen::MatrixXd H;
+                cnoid::calcAngularMomentumJacobian(this->ioBody, nullptr, H);
+                return H;
+            };
+        com_ang.calcError = [this]()
+            {
+                cnoid::Vector3 tmp_P, L;
+                this->ioBody->calcTotalMomentum(tmp_P, L);
+                return target_com_ang_vel - L;
+            };
+        ik_params.push_back(std::move(com_ang));
+    }
+
+    // End-effector IK parameters
+    for (size_t i = 0; i < target_ee.size(); ++i) {
+        IKParam ee_ikparam;
+        ee_ikparam.target_type = ik_3daffine;
+        ee_ikparam.calcJacobian = [this, i]()
+            {
+                Eigen::MatrixXd J;
+                cnoid::setJacobian<0x3f, 0, 0>(*(this->ee_trans_vec[i].ee_path), this->ee_trans_vec[i].ee_path->endLink(), J);
+                return J;
+            };
+        ee_ikparam.calcError = [this, i]()
+            {
+                cnoid::Vector6 error;
+                error.head<3>() = this->target_ee[i].translation() - this->ee_trans_vec[i].ee_path->endLink()->p();
+                error.segment<3>(3) = this->target_ee[i].linear() * cnoid::omegaFromRot(this->target_ee[i].linear().transpose() * this->ee_trans_vec[i].ee_path->endLink()->R());
+                return error;
+            };
+        ik_params.push_back(std::move(ee_ikparam));
+    }
+
+    return true;
+}
+
+void Balancer::calcFootOriginCoords (cnoid::Vector3& foot_origin_pos, cnoid::Matrix3& foot_origin_rot)
+{
+    // rats::coordinates leg_c[2], tmpc;
+    // cnoid::Vector3 ez = cnoid::Vector3::UnitZ();
+    // cnoid::Vector3 ex = cnoid::Vector3::UnitX();
+    // size_t i = 0;
+    // // for (auto itr = ee_map.begin(); itr != ee_map.end(); itr++ ) {
+    // //     if (itr->first.find("leg") == std::string::npos) continue;
+    // //     hrp::Link* target = ioBody->sensor<hrp::ForceSensor>(itr->second.sensor_name)->link;
+    // //     leg_c[i].pos = target->p;
+    // //     hrp::Vector3 xv1(target->R * ex);
+    // //     xv1(2)=0.0;
+    // //     xv1.normalize();
+    // //     hrp::Vector3 yv1(ez.cross(xv1));
+    // //     leg_c[i].rot(0,0) = xv1(0); leg_c[i].rot(1,0) = xv1(1); leg_c[i].rot(2,0) = xv1(2);
+    // //     leg_c[i].rot(0,1) = yv1(0); leg_c[i].rot(1,1) = yv1(1); leg_c[i].rot(2,1) = yv1(2);
+    // //     leg_c[i].rot(0,2) = ez(0); leg_c[i].rot(1,2) = ez(1); leg_c[i].rot(2,2) = ez(2);
+    // //     i++;
+    // // }
+    // // Only double support is assumed
+    // // void mid_coords(coordinates& mid_coords, const double p, const coordinates& c1, const coordinates& c2, const double eps) {
+    // //     mid_coords.pos = (1 - p) * c1.pos + p * c2.pos;
+    // //     mid_rot(mid_coords.rot, p, c1.rot, c2.rot, eps);
+    // // };
+    // // rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
+    // foot_origin_pos = tmpc.pos;
+    // foot_origin_rot = tmpc.rot;
 }
 
 bool Balancer::startBalancer()
@@ -359,6 +453,25 @@ bool Balancer::stopBalancer()
 {
     return true;
 };
+
+bool Balancer::startJump(const double height, const double squat)
+{
+    // control_count = 0;
+    is_jumping = true;
+
+    const cnoid::Vector3 startPos = ioBody->calcCenterOfMass();
+    const cnoid::Vector3 start(startPos[2], 0, 0); // pos, vel, acc
+    const cnoid::Vector3 finish(startPos[2] + 0.15, sqrt(2 * G_ACC * height), G_ACC);
+    const minJerkCoeffTime coeff_time = calcMinJerkCoeffWithTimeInitJerkZero(start, finish);
+    minJerkCoeff coeff;
+    std::copy(coeff_time.begin(), coeff_time.end() - 1, coeff.begin()); // Remove time from coeff_time
+
+    // auto calcCOM = std::bind(calcNthOrderSpline, coeff, std::placeholders::_1);
+    // calc = calcNthOrderSpline(coeff); // curry
+
+    // setCOMCalcRule(std::bind(jumpControl, coeff), T);
+    return true;
+}
 
 /*
 RTC::ReturnCode_t Balancer::onAborting(RTC::UniqueId ec_id)
@@ -397,13 +510,11 @@ RTC::ReturnCode_t Balancer::onRateChanged(RTC::UniqueId ec_id)
 
 extern "C"
 {
-
-  void BalancerInit(RTC::Manager* manager)
-  {
+void BalancerInit(RTC::Manager* manager)
+{
     RTC::Properties profile(Balancer_spec);
     manager->registerFactory(profile,
                              RTC::Create<Balancer>,
                              RTC::Delete<Balancer>);
-  }
-
+}
 };

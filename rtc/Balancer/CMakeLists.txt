@@ -4,25 +4,26 @@ if(NOT BUILD_BALANCER)
   return()
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-# pkg_check_modules(cnoid-plugin REQUIRED choreonoid-body-plugin)
-# include_directories(${cnoid-plugin_INCLUDE_DIRS})
-# link_directories(${cnoid-plugin_LIBRARY_DIRS})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 
-set(comp_sources Balancer.cpp BalancerService_impl.cpp
-  ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp
-  ../SequencePlayer/interpolator.cpp)
-set(libs hrpModel-3.1 hrpCollision-3.1 hrpUtil-3.1 hrpsysBaseStub)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(cnoid-body choreonoid-body REQUIRED)
+include_directories(${cnoid-body_INCLUDE_DIRS})
+link_directories(${cnoid-body_LIBRARY_DIRS})
 
-add_library(Balancer SHARED ${comp_sources})
-target_link_libraries(Balancer ${libs})
+set(UTILDIR util)
+add_library(BalancerUtil SHARED ${UTILDIR}/Interpolator.cpp ${UTILDIR}/Kinematics.cpp)
+target_link_libraries(BalancerUtil PRIVATE ${cnoid-body_LIBRARIES})
+set_target_properties(BalancerUtil PROPERTIES PREFIX "lib")
+
+add_library(Balancer SHARED Balancer.cpp BalancerService_impl.cpp)
+target_link_libraries(Balancer PRIVATE BalancerUtil ${cnoid-body_LIBRARIES} hrpsysBaseStub)
 set_target_properties(Balancer PROPERTIES PREFIX "")
 
-add_executable(BalancerComp BalancerComp.cpp ${comp_sources})
-target_link_libraries(BalancerComp ${libs})
+add_executable(BalancerComp BalancerComp.cpp)
+target_link_libraries(BalancerComp PRIVATE Balancer hrpsysBaseStub)
 
-set(target Balancer BalancerComp)
-
+set(target BalancerUtil Balancer BalancerComp)
 install(TARGETS ${target}
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib

@@ -59,12 +59,15 @@ static std::ostream& operator<<(std::ostream& os, const struct RTC::Time &tm)
 Balancer::Balancer(RTC::Manager* manager)
   : RTC::DataFlowComponentBase(manager),
     // <rtc-template block="initializer">
+    // Input
     m_BalancerServicePort("BalancerService"),
     m_qCurrentIn("qCurrent", m_qCurrent),
     m_rpyIn("rpy", m_rpy),
     m_qRefIn("qRef", m_qRef),
     m_basePosIn("basePosIn", m_basePos),
     m_baseRpyIn("baseRpyIn", m_baseRpy),
+    // Output
+    m_qRefOut("q", m_qRef),
     // </rtc-template>
     // m_robot(hrp::BodyPtr()),
     m_debugLevel(0)
@@ -93,6 +96,8 @@ RTC::ReturnCode_t Balancer::onInitialize()
     addInPort("qRef", m_qRefIn);
     addInPort("basePosIn", m_basePosIn);
     addInPort("baseRpyIn", m_baseRpyIn);
+    // Set OutPort buffers
+    addOutPort("q", m_qRefOut);
 
     // Set service provider to Ports
     m_BalancerServicePort.registerProvider("service0", "BalancerService", m_BalancerService);
@@ -102,6 +107,8 @@ RTC::ReturnCode_t Balancer::onInitialize()
     addPort(m_BalancerServicePort);
 
     loop = 0;
+    control_endcount = 0;
+    control_mode = IDLE;
 
     // Get dt
     RTC::Properties& prop = getProperties(); // get properties information from .wrl file
@@ -235,6 +242,7 @@ RTC::ReturnCode_t Balancer::onInitialize()
     target_ee.resize(end_effectors_str.size());
     // Reserve IK Parameter Vector
     ik_params.reserve(end_effectors_str.size() + 2); // EE + COM Pos + COM Ang Vel
+    setIKLimbAsDefault();
 
     // hrp::Sensor* sensor = ioBody->sensor<hrp::RateGyroSensor>("gyrometer");
     // if (sensor == NULL) {
@@ -242,6 +250,9 @@ RTC::ReturnCode_t Balancer::onInitialize()
     //               << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
     //               << std::endl;
     // }
+
+    m_qCurrent.data.length(ioBody->numJoints());
+    m_qRef.data.length(ioBody->numJoints());
 
     return RTC::RTC_OK;
 }
@@ -319,18 +330,36 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         }
     }
 
+    if (control_mode == JUMPING) {
+        if (loop > control_endcount) control_mode = IDLE;
+        target_com_pos = ioBody->centerOfMass();
+        target_com_pos[2] = calcNthOrderSpline(spline_coeff, (control_endcount - loop) * m_dt);
+        target_com_ang_vel = cnoid::Vector3::Zero();
+        for (size_t i = 0; i < target_ee.size(); ++i) {
+            target_ee[i].translation() = ee_trans_vec[i].ee_path->endLink()->p();
+            target_ee[i].linear() = cnoid::Matrix3::Identity();
+        }
+    }
+
+
+    for (size_t i = 0; i < ioBody->numJoints(); ++i) {
+        m_qRef.data[i] = ioBody->joint(i)->q();
+    }
+
+    m_qRefOut.write();
+
     return RTC::RTC_OK;
 }
 
 bool Balancer::setBalancerParam(const OpenHRP::BalancerService::BalancerParam& i_param)
 {
     return true;
-};
+}
 
 bool Balancer::getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_param)
 {
     return true;
-};
+}
 
 void Balancer::getCurrentStates()
 {
@@ -447,24 +476,24 @@ void Balancer::calcFootOriginCoords (cnoid::Vector3& foot_origin_pos, cnoid::Mat
 bool Balancer::startBalancer()
 {
     return true;
-};
+}
 
 bool Balancer::stopBalancer()
 {
     return true;
-};
+}
 
 bool Balancer::startJump(const double height, const double squat)
 {
-    // control_count = 0;
-    is_jumping = true;
+    control_mode = JUMPING;
 
     const cnoid::Vector3 startPos = ioBody->calcCenterOfMass();
     const cnoid::Vector3 start(startPos[2], 0, 0); // pos, vel, acc
     const cnoid::Vector3 finish(startPos[2] + 0.15, sqrt(2 * G_ACC * height), G_ACC);
     const minJerkCoeffTime coeff_time = calcMinJerkCoeffWithTimeInitJerkZero(start, finish);
-    minJerkCoeff coeff;
-    std::copy(coeff_time.begin(), coeff_time.end() - 1, coeff.begin()); // Remove time from coeff_time
+    std::copy(coeff_time.begin(), coeff_time.end() - 1, spline_coeff.begin()); // Remove time from coeff_time
+
+    control_endcount = loop + coeff_time.back() / m_dt;
 
     // auto calcCOM = std::bind(calcNthOrderSpline, coeff, std::placeholders::_1);
     // calc = calcNthOrderSpline(coeff); // curry

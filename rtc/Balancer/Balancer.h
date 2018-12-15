@@ -30,6 +30,7 @@
 #include <cnoid/JointPath>
 #include <cnoid/EigenTypes>
 #include "util/Kinematics.h"
+#include "util/Interpolator.h"
 
 // Service implementation headers
 // <rtc-template block="service_impl_h">
@@ -145,13 +146,14 @@ class Balancer
 
     // DataOutPort declaration
     // <rtc-template block="outport_declare">
+    RTC::OutPort<RTC::TimedDoubleSeq> m_qRefOut;
 
     // </rtc-template>
 
     // CORBA Port declaration
     // <rtc-template block="corbaport_declare">
 
-    // </rtc-template>
+    // </rtc-template>nn
 
     // Service declaration
     // <rtc-template block="service_declare">
@@ -170,6 +172,7 @@ class Balancer
     coil::Mutex m_mutex;
     double m_dt;
     unsigned loop; //counter in onExecute
+    unsigned control_endcount;
     cnoid::BodyPtr ioBody;
     std::vector<cnoid::Vector3> act_force;
 
@@ -194,9 +197,13 @@ class Balancer
     cnoid::Vector3 target_com_ang_vel;
     std::vector<cnoid::Position> target_ee;
     std::vector<IKParam> ik_params;
+    minJerkCoeff spline_coeff;
 
     // States
-    bool is_jumping;
+    enum ControlMode {
+        IDLE,
+        JUMPING,
+    } control_mode;
 
     // std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
     cnoid::Matrix3 foot_origin_rot;

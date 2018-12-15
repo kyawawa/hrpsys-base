@@ -21,7 +21,7 @@ target_link_libraries(Balancer PRIVATE BalancerUtil ${cnoid-body_LIBRARIES} hrps
 set_target_properties(Balancer PROPERTIES PREFIX "")
 
 add_executable(BalancerComp BalancerComp.cpp)
-target_link_libraries(BalancerComp PRIVATE Balancer hrpsysBaseStub)
+target_link_libraries(BalancerComp PRIVATE Balancer BalancerUtil hrpsysBaseStub)
 
 set(target BalancerUtil Balancer BalancerComp)
 install(TARGETS ${target}

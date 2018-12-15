@@ -20,6 +20,13 @@ minJerkCoeffTime calcMinJerkCoeffWithTimeInitJerkZero(const Eigen::Vector3d& sta
 // double calcFifthOrderSpline(double t, const minJerkCoeff& coeff);
 
 template<size_t n>
-double calcNthOrderSpline(const std::array<double, n>& coeff, const double t);
+double calcNthOrderSpline(const std::array<double, n>& coeff, const double t)
+{
+    double value = 0;
+    for (size_t i = 0; i < n + 1; ++i) {
+        value += coeff[i] * pow(t, i);
+    }
+    return value;
+}
 
 #endif // __INTERPOLATOR_H__

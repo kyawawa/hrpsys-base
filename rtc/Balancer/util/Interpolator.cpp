@@ -50,13 +50,3 @@ minJerkCoeffTime calcMinJerkCoeffWithTimeInitJerkZero(const Eigen::Vector3d& sta
 
     return minJerkCoeffTime{{a0, a1, a2, a3, a4, a5, T}};
 }
-
-template<size_t n>
-double calcNthOrderSpline(const std::array<double, n>& coeff, const double t)
-{
-    double value = 0;
-    for (size_t i = 0; i < n + 1; ++i) {
-        value += coeff[i] * pow(t, i);
-    }
-    return value;
-}

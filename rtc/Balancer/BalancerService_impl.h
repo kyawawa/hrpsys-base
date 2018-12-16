@@ -26,7 +26,10 @@ public:
     CORBA::Boolean setBalancerParam(const OpenHRP::BalancerService::BalancerParam& i_param);
     CORBA::Boolean getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_param);
     CORBA::Boolean startBalancer();
-    CORBA::Boolean stopBalancer();
+    CORBA::Boolean stopBalancer(CORBA::Double migration_time);
+    CORBA::Boolean startJump(CORBA::Double height, CORBA::Double squat);
+    CORBA::Boolean startSquat();
+    CORBA::Boolean stopSquat();
 
     void balancer(Balancer *i_balancer);
 private:

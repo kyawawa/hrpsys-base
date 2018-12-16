@@ -64,60 +64,62 @@ class Balancer
 
     // The initialize action (on CREATED->ALIVE transition)
     // formaer rtc_init_entry()
-    virtual RTC::ReturnCode_t onInitialize();
+    virtual RTC::ReturnCode_t onInitialize() override;
 
     // The finalize action (on ALIVE->END transition)
     // formaer rtc_exiting_entry()
-    virtual RTC::ReturnCode_t onFinalize();
+    virtual RTC::ReturnCode_t onFinalize() override;
 
     // The startup action when ExecutionContext startup
     // former rtc_starting_entry()
-    // virtual RTC::ReturnCode_t onStartup(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onStartup(RTC::UniqueId ec_id) override;
 
     // The shutdown action when ExecutionContext stop
     // former rtc_stopping_entry()
-    // virtual RTC::ReturnCode_t onShutdown(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onShutdown(RTC::UniqueId ec_id) override;
 
     // The activated action (Active state entry action)
     // former rtc_active_entry()
-    virtual RTC::ReturnCode_t onActivated(RTC::UniqueId ec_id);
+    virtual RTC::ReturnCode_t onActivated(RTC::UniqueId ec_id) override;
 
     // The deactivated action (Active state exit action)
     // former rtc_active_exit()
-    virtual RTC::ReturnCode_t onDeactivated(RTC::UniqueId ec_id);
+    virtual RTC::ReturnCode_t onDeactivated(RTC::UniqueId ec_id) override;
 
     // The execution action that is invoked periodically
     // former rtc_active_do()
-    virtual RTC::ReturnCode_t onExecute(RTC::UniqueId ec_id);
+    virtual RTC::ReturnCode_t onExecute(RTC::UniqueId ec_id) override;
 
     // The aborting action when main logic error occurred.
     // former rtc_aborting_entry()
-    // virtual RTC::ReturnCode_t onAborting(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onAborting(RTC::UniqueId ec_id) override;
 
     // The error action in ERROR state
     // former rtc_error_do()
-    // virtual RTC::ReturnCode_t onError(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onError(RTC::UniqueId ec_id) override;
 
     // The reset action that is invoked resetting
     // This is same but different the former rtc_init_entry()
-    // virtual RTC::ReturnCode_t onReset(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onReset(RTC::UniqueId ec_id) override;
 
     // The state update action that is invoked after onExecute() action
     // no corresponding operation exists in OpenRTm-aist-0.2.0
-    // virtual RTC::ReturnCode_t onStateUpdate(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onStateUpdate(RTC::UniqueId ec_id) override;
 
     // The action that is invoked when execution context's rate is changed
     // no corresponding operation exists in OpenRTm-aist-0.2.0
-    // virtual RTC::ReturnCode_t onRateChanged(RTC::UniqueId ec_id);
+    // virtual RTC::ReturnCode_t onRateChanged(RTC::UniqueId ec_id) override;
 
     bool setBalancerParam(const OpenHRP::BalancerService::BalancerParam& i_param);
     bool getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_param);
-    void getCurrentStates();
     bool setIKLimbAsDefault();
     void calcFootOriginCoords (cnoid::Vector3& foot_origin_pos, cnoid::Matrix3& foot_origin_rot);
     bool startBalancer();
-    bool stopBalancer();
+    bool stopBalancer(const double migration_time = 5.0);
     bool startJump(const double height, const double squat = 0.0);
+    // Debug mode to confirm IK
+    bool startSquat();
+    bool stopSquat();
 
   protected:
     // Configuration variable declaration
@@ -147,6 +149,7 @@ class Balancer
     // DataOutPort declaration
     // <rtc-template block="outport_declare">
     RTC::OutPort<RTC::TimedDoubleSeq> m_qRefOut;
+    RTC::OutPort<RTC::TimedPoint3D> m_basePosOut;
 
     // </rtc-template>
 
@@ -171,10 +174,29 @@ class Balancer
     unsigned m_debugLevel;
     coil::Mutex m_mutex;
     double m_dt;
+
+    // States
+    enum ControlMode {
+        NOCONTROL,
+        SYNC_TO_IDLE,
+        SYNC_TO_NOCONTROL,
+        IDLE,
+        JUMPING,
+        SQUAT,
+    } control_mode;
+
     unsigned loop; //counter in onExecute
+    unsigned control_startcount;
     unsigned control_endcount;
     cnoid::BodyPtr ioBody;
+    std::vector<double> q_prev;
     std::vector<cnoid::Vector3> act_force;
+
+    void getCurrentStates();
+    void setCurrentStates();
+    void readInPortData();
+    void writeOutPortData();
+    void calcFK();
 
     struct EEIKParam {
         std::string target_name; // Name of end link
@@ -198,12 +220,7 @@ class Balancer
     std::vector<cnoid::Position> target_ee;
     std::vector<IKParam> ik_params;
     minJerkCoeff spline_coeff;
-
-    // States
-    enum ControlMode {
-        IDLE,
-        JUMPING,
-    } control_mode;
+    std::vector<minJerkCoeff> spline_coeff_vec;
 
     // std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
     cnoid::Matrix3 foot_origin_rot;

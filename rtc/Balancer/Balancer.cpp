@@ -10,21 +10,22 @@
 #include <rtm/CorbaNaming.h>
 #include <iomanip>
 // #include "hrpsys/util/VectorConvert.h"
-#include "hrpsys/util/Hrpsys.h"
+// #include "hrpsys/util/Hrpsys.h"
 #include "Balancer.h"
 #include <cnoid/BodyLoader>
 #include <cnoid/ForceSensor>
 #include <cnoid/EigenUtil>
-#include <cnoid/Referenced>
+// #include <cnoid/Referenced>
 #include "util/Interpolator.h"
 
 using Guard = coil::Guard<coil::Mutex>;
-using BodyPtrWeak = cnoid::weak_ref_ptr<cnoid::Body>;
+// using BodyPtrWeak = cnoid::weak_ref_ptr<cnoid::Body>;
 
 namespace {
 constexpr double G_ACC = -9.80665;
 inline bool eps_eq(const double a, const double b, const double eps = 1e-3) { return std::abs(a - b) <= eps; };
 }
+
 // Module specification
 // <rtc-template block="module_spec">
 static const char* Balancer_spec[] =
@@ -68,6 +69,7 @@ Balancer::Balancer(RTC::Manager* manager)
     m_baseRpyIn("baseRpyIn", m_baseRpy),
     // Output
     m_qRefOut("q", m_qRef),
+    m_basePosOut("basePosOut", m_basePos),
     // </rtc-template>
     // m_robot(hrp::BodyPtr()),
     m_debugLevel(0)
@@ -107,8 +109,9 @@ RTC::ReturnCode_t Balancer::onInitialize()
     addPort(m_BalancerServicePort);
 
     loop = 0;
+    control_startcount = 0;
     control_endcount = 0;
-    control_mode = IDLE;
+    control_mode = NOCONTROL;
 
     // Get dt
     RTC::Properties& prop = getProperties(); // get properties information from .wrl file
@@ -187,30 +190,38 @@ RTC::ReturnCode_t Balancer::onInitialize()
     if (end_effectors_str.size() > 0) {
         size_t prop_num = 10;
         size_t num = end_effectors_str.size() / prop_num;
-        for (size_t i = 0; i < num; i++) {
-            std::string ee_name, ee_target, ee_base;
-            coil::stringTo(ee_name, end_effectors_str[i*prop_num].c_str());
-            coil::stringTo(ee_target, end_effectors_str[i*prop_num+1].c_str());
-            coil::stringTo(ee_base, end_effectors_str[i*prop_num+2].c_str());
+        target_ee.resize(num);
+        ee_trans_vec.reserve(num);
 
-            // EETrans ee_local_trans;
+        for (size_t i = 0; i < num; i++) {
+            const std::string ee_name(std::move(end_effectors_str[i*prop_num]));
+            const std::string ee_target(std::move(end_effectors_str[i*prop_num+1]));
+            const std::string ee_base(std::move(end_effectors_str[i*prop_num+2]));
+
             EETrans ee_local_trans;
             {
-                cnoid::Vector3 local_pos;
-                for (size_t j = 0; j < 3; j++) {
-                    coil::stringTo(local_pos(j), end_effectors_str[i*prop_num+3+j].c_str());
-                }
-                ee_local_trans.local_trans.translation() = local_pos;
+                const cnoid::Vector3 local_pos(std::stod(end_effectors_str[i*prop_num+3]),
+                                               std::stod(end_effectors_str[i*prop_num+3+1]),
+                                               std::stod(end_effectors_str[i*prop_num+3+2]));
+                // for (size_t j = 0; j < 3; j++) {
+                //     coil::stringTo(local_pos(j), end_effectors_str[i*prop_num+3+j].c_str());
+                // }
+                ee_local_trans.local_trans.translation() = std::move(local_pos);
             }
             {
-                double rotation_vector[4]; // rotation in VRML is represented by axis + angle
-                for (size_t j = 0; j < 4; ++j)
-                    coil::stringTo(rotation_vector[j], end_effectors_str[i*prop_num+6+j].c_str());
+                // double rotation_vector[4]; // rotation in VRML is represented by axis + angle
+                // for (size_t j = 0; j < 4; ++j)
+                //     coil::stringTo(rotation_vector[j], end_effectors_str[i*prop_num+6+j].c_str());
+                // ee_local_trans.local_trans.linear() =
+                //     Eigen::AngleAxisd(rotation_vector[3],
+                //                       cnoid::Vector3(rotation_vector[0],
+                //                                      rotation_vector[1],
+                //                                      rotation_vector[2])).toRotationMatrix();
                 ee_local_trans.local_trans.linear() =
-                    Eigen::AngleAxisd(rotation_vector[3],
-                                      cnoid::Vector3(rotation_vector[0],
-                                                     rotation_vector[1],
-                                                     rotation_vector[2])).toRotationMatrix();
+                    Eigen::AngleAxisd(stod(end_effectors_str[i*prop_num+6+3]),
+                                      cnoid::Vector3(stod(end_effectors_str[i*prop_num+6]),
+                                                     stod(end_effectors_str[i*prop_num+6+1]),
+                                                     stod(end_effectors_str[i*prop_num+6+2]))).toRotationMatrix();
             }
 
             ee_local_trans.target_name = ee_target;
@@ -232,27 +243,24 @@ RTC::ReturnCode_t Balancer::onInitialize()
             }
             ee_trans_vec.push_back(ee_local_trans);
 
-            std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "]" << ee_target << " " << ee_base << std::endl;
+            std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "] " << ee_target << " " << ee_base << std::endl;
             std::cerr << "[" << m_profile.instance_name << "]   target = " << ee_target << ", base = " << ee_base << ", sensor_name = " << ee_local_trans.sensor_name << std::endl;
             // std::cerr << "[" << m_profile.instance_name << "]   localPos = " << ee_local_trans.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
             // std::cerr << "[" << m_profile.instance_name << "]   localR = " << ee_local_trans.localR.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "    [", "]")) << std::endl;
         }
     }
 
-    target_ee.resize(end_effectors_str.size());
     // Reserve IK Parameter Vector
     ik_params.reserve(end_effectors_str.size() + 2); // EE + COM Pos + COM Ang Vel
     setIKLimbAsDefault();
 
-    // hrp::Sensor* sensor = ioBody->sensor<hrp::RateGyroSensor>("gyrometer");
-    // if (sensor == NULL) {
-    //     std::cerr << "[" << m_profile.instance_name
-    //               << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
-    //               << std::endl;
-    // }
-
-    m_qCurrent.data.length(ioBody->numJoints());
-    m_qRef.data.length(ioBody->numJoints());
+    // Resize joint vector
+    {
+        const size_t num_joints = ioBody->numJoints();
+        q_prev.resize(num_joints);
+        m_qCurrent.data.length(num_joints);
+        m_qRef.data.length(num_joints);
+    }
 
     return RTC::RTC_OK;
 }
@@ -290,65 +298,218 @@ RTC::ReturnCode_t Balancer::onDeactivated(RTC::UniqueId ec_id)
 }
 
 
-#define DEBUGP ((m_debugLevel==1 && loop%200==0) || m_debugLevel > 1 )
+// #define DEBUGP ((m_debugLevel==1 && loop%200==0) || m_debugLevel > 1 )
 RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
 {
     ++loop;
+    readInPortData();
 
-    // check dataport input
-    for (size_t i = 0; i < m_forceIn.size(); i++) {
-        if (m_forceIn[i]->isNew()) {
-            m_forceIn[i]->read();
+    if (control_mode >= SYNC_TO_NOCONTROL) getCurrentStates();
+
+    if (control_mode == SYNC_TO_NOCONTROL) {
+        if (loop > control_endcount) control_mode = NOCONTROL;
+        {
+            size_t i = 0;
+            for (auto joint : ioBody->joints()) {
+                joint->q() = calcNthOrderSpline(spline_coeff_vec[i], (loop - control_startcount) * m_dt);
+                ++i;
+            }
         }
-    }
-    if (m_basePosIn.isNew()) {
-        m_basePosIn.read();
-    }
-    if (m_baseRpyIn.isNew()) {
-        m_baseRpyIn.read();
-    }
-    if (m_rpyIn.isNew()) {
-        m_rpyIn.read();
-    }
-    if (m_qRefIn.isNew()) {
-        m_qRefIn.read();
-    }
-
-    //syncronize ioBody to the real robot
-    if (m_qRef.data.length() ==  ioBody->numJoints()) {
-        Guard guard(m_mutex);
-
-        // Get current states
-        getCurrentStates();
-
-        // Get force sensor values
-        // Force sensor's force value is absolute in reference frame
-        auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
-        for (size_t i = 0; i < m_force.size(); ++i) {
-            act_force[i] = fsensors[i]->link()->R() * fsensors[i]->R_local() *
-                cnoid::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
-        }
-    }
-
-    if (control_mode == JUMPING) {
+    } else if (control_mode == JUMPING) {
         if (loop > control_endcount) control_mode = IDLE;
         target_com_pos = ioBody->centerOfMass();
-        target_com_pos[2] = calcNthOrderSpline(spline_coeff, (control_endcount - loop) * m_dt);
+        // std::cerr << "cur com z: " << target_com_pos[2] << std::endl;
+        target_com_pos[2] = calcNthOrderSpline(spline_coeff, (loop - control_startcount) * m_dt);
+        // std::cerr << "ref com z: " << target_com_pos[2] << std::endl;
         target_com_ang_vel = cnoid::Vector3::Zero();
         for (size_t i = 0; i < target_ee.size(); ++i) {
             target_ee[i].translation() = ee_trans_vec[i].ee_path->endLink()->p();
-            target_ee[i].linear() = cnoid::Matrix3::Identity();
+            target_ee[i].linear() = ee_trans_vec[i].ee_path->endLink()->R();
+        }
+
+        // std::cerr << "root_t1: \n" << ioBody->rootLink()->T().matrix() << std::endl;
+
+        // solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
+        //                          ik_params,
+        //                          [this] () { this->ioBody->calcForwardKinematics(); this->ioBody->calcCenterOfMass();
+        //                              std::cerr << "root_t2: \n" << this->ioBody->rootLink()->T().matrix() << std::endl;
+        //                          },
+        //                          1e-2, 10, 1e-1);
+        // std::cerr << "q bef: ";
+        // for (auto joint : ioBody->joints()) {
+        //     std::cerr << joint->q() << ", ";
+        // }
+        // std::cerr << std::endl;
+        solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
+                                 ik_params, [this]() { this->calcFK(); },
+                                 1e-6, 1e-3, 100, 1e-1);
+        // std::cerr << "q aft: ";
+        // for (auto joint : ioBody->joints()) {
+        //     std::cerr << joint->q() << ", ";
+        // }
+        // std::cerr << std::endl;
+
+        // std::cerr << "root_t2: \n" << ioBody->rootLink()->T().matrix() << std::endl;
+    }
+    else if (control_mode == SQUAT) {
+        static double target = ioBody->centerOfMass()[2];
+        target_com_pos = ioBody->centerOfMass();
+        std::cerr << "current com pos: " << target_com_pos[2] << std::endl;
+        // target_com_pos[2] += 0.05 * sin(2 * M_PI * (loop - control_startcount + 500 * 2) / (500 * 4.0)) - 0.05; // 1 squat in 4 seconds
+        // target_com_pos[2] += 0.05 * cos(2 * M_PI * (loop - control_startcount) / (500 * 4.0)) - 0.05; // 1 squat in 4 seconds
+        // target_com_pos[2] += -0.07 * (2 * M_PI / (500 * 4.0)) * sin(2 * M_PI * (loop - control_startcount) / (500 * 4.0)); // 1 squat in 4 seconds
+        target_com_pos[2] = target + 0.05 * cos(2 * M_PI * (loop - control_startcount) / (500 * 4.0)) - 0.05;
+        std::cerr << "target  com pos: " << target_com_pos[2] << std::endl;
+        target_com_ang_vel = cnoid::Vector3::Zero();
+        for (size_t i = 0; i < target_ee.size(); ++i) {
+            target_ee[i].translation() = ee_trans_vec[i].ee_path->endLink()->p();
+            target_ee[i].linear() = ee_trans_vec[i].ee_path->endLink()->R();
+        }
+        solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
+                                 ik_params, [this]() { this->calcFK(); },
+                                 1e-6, 1e-3, 100, 1e-1);
+    }
+
+    setCurrentStates();
+    writeOutPortData();
+
+    return RTC::RTC_OK;
+}
+
+inline void Balancer::readInPortData()
+{
+    // check dataport input
+    if (m_basePosIn.isNew()) m_basePosIn.read();
+    if (m_baseRpyIn.isNew()) m_baseRpyIn.read();
+    if (m_rpyIn.isNew())     m_rpyIn.read();
+    if (m_qRefIn.isNew())    m_qRefIn.read();
+    for (size_t i = 0; i < m_forceIn.size(); i++) {
+        if (m_forceIn[i]->isNew()) m_forceIn[i]->read();
+    }
+
+    //syncronize ioBody to the real robot
+    // ioBody->rootLink()->p() = cnoid::Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
+    // ioBody->rootLink()->R() = cnoid::rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
+
+    if (m_qRef.data.length() == ioBody->numJoints()) {
+        size_t i = 0;
+        // std::cerr << "m_q bef: ";
+        for (auto joint : ioBody->joints()) {
+            joint->q() = m_qRef.data[i++];
+            // std::cerr << m_qRef.data[i - 1] << " ";
+        }
+        // std::cerr << std::endl;
+    }
+
+    // Get force sensor values
+    // Force sensor's force value is absolute in reference frame
+    auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
+    for (size_t i = 0, n = m_force.size(); i < n; ++i) {
+        act_force[i] = fsensors[i]->link()->R() * fsensors[i]->R_local() *
+            cnoid::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
+    }
+}
+
+inline void Balancer::writeOutPortData()
+{
+    {
+        size_t i = 0;
+        for (auto joint : ioBody->joints()) {
+            m_qRef.data[i++] = joint->q();
+        }
+        m_qRefOut.write();
+    }
+
+    m_basePos.tm = m_qRef.tm;
+    m_basePos.data.x = ioBody->rootLink()->p().x();
+    m_basePos.data.y = ioBody->rootLink()->p().x();
+    m_basePos.data.z = ioBody->rootLink()->p().x();
+}
+
+void Balancer::getCurrentStates()
+{
+    {
+        size_t i = 0;
+        for (auto joint : ioBody->joints()) joint->q() = q_prev[i++];
+    }
+
+    calcFK();
+}
+
+inline void Balancer::setCurrentStates()
+{
+    {
+        size_t i = 0;
+        for (auto joint : ioBody->joints()) q_prev[i++] = joint->q();
+    }
+}
+
+bool Balancer::startBalancer()
+{
+    control_mode = SYNC_TO_IDLE;
+    std::cerr << "[" << m_profile.instance_name << "] start Balancer" << std::endl;
+    return true;
+}
+
+bool Balancer::stopBalancer(const double migration_time)
+{
+    std::cerr << "[" << m_profile.instance_name << "] stop Balancer" << std::endl;
+
+    control_mode = SYNC_TO_NOCONTROL;
+    control_startcount = loop;
+    control_endcount = loop + migration_time / m_dt;
+
+    {
+        const size_t num_joints = ioBody->numJoints();
+        spline_coeff_vec.resize(num_joints);
+        for (size_t i = 0; i < num_joints; ++i) {
+            const cnoid::Vector3 start(q_prev[i], 0, 0); // pos, vel, acc
+            const cnoid::Vector3 finish(m_qRef.data[i], 0, 0);
+            spline_coeff_vec[i] = calcMinJerkCoeff(start, finish, migration_time);
         }
     }
 
+    return true;
+}
 
-    for (size_t i = 0; i < ioBody->numJoints(); ++i) {
-        m_qRef.data[i] = ioBody->joint(i)->q();
-    }
+bool Balancer::startJump(const double height, const double squat)
+{
+    control_mode = JUMPING;
 
-    m_qRefOut.write();
+    const cnoid::Vector3 startPos = ioBody->calcCenterOfMass();
+    const cnoid::Vector3 start(startPos[2], 0, 0); // pos, vel, acc
+    const cnoid::Vector3 finish(startPos[2] + 0.15, sqrt(2 * -G_ACC * height), G_ACC);
+    const minJerkCoeffTime coeff_time = calcMinJerkCoeffWithTimeInitJerkZero(start, finish);
+    std::copy(coeff_time.begin(), coeff_time.end() - 1, spline_coeff.begin()); // Remove time from coeff_time
 
-    return RTC::RTC_OK;
+    control_startcount = loop;
+    control_endcount = loop + coeff_time.back() / m_dt;
+
+    // auto calcCOM = std::bind(calcNthOrderSpline, coeff, std::placeholders::_1);
+    // calc = calcNthOrderSpline(coeff); // curry
+
+    // setCOMCalcRule(std::bind(jumpControl, coeff), T);
+    return true;
+}
+
+bool Balancer::startSquat()
+{
+    control_mode = SQUAT;
+    control_startcount = loop;
+    ik_params[1].IK_weight *= 0; // CoM Angular Momentum
+    return true;
+}
+
+bool Balancer::stopSquat()
+{
+    control_mode = IDLE;
+    return true;
+}
+
+inline void Balancer::calcFK()
+{
+    ioBody->calcForwardKinematics();
+    ioBody->calcCenterOfMass();
 }
 
 bool Balancer::setBalancerParam(const OpenHRP::BalancerService::BalancerParam& i_param)
@@ -361,21 +522,6 @@ bool Balancer::getBalancerParam(OpenHRP::BalancerService::BalancerParam_out i_pa
     return true;
 }
 
-void Balancer::getCurrentStates()
-{
-    // reference model
-    for (unsigned i = 0; i < ioBody->numJoints(); i++) {
-        ioBody->joint(i)->q() = m_qRef.data[i];
-    }
-    ioBody->rootLink()->p() = cnoid::Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
-    ioBody->rootLink()->R() = cnoid::rotFromRpy(m_baseRpy.data.r, m_baseRpy.data.p, m_baseRpy.data.y);
-    ioBody->calcForwardKinematics();
-
-    cnoid::Vector3 foot_origin_pos;
-    cnoid::Matrix3 foot_origin_rot;
-    calcFootOriginCoords(foot_origin_pos, foot_origin_rot);
-}
-
 bool Balancer::setIKLimbAsDefault()
 {
     {
@@ -386,59 +532,73 @@ bool Balancer::setIKLimbAsDefault()
 
     // COM Position
     {
-        IKParam com_ik;
-        com_ik.target_type = ik_trans;
+        IKParam com_ik(ik_trans);
         // com_ik.calcJacobian = [ioBodyWeak = BodyPtrWeak(ioBody)]()
-        com_ik.calcJacobian = [this]()
+        com_ik.calcJacobian = [&]()
             {
                 Eigen::MatrixXd J;
-                cnoid::calcCMJacobian(this->ioBody, nullptr, J);
-                return J;
+                cnoid::calcCMJacobian(ioBody, nullptr, J); // RMC Eq.1 upper [M/m E -r]
+                // std::cerr << "J:\n" << J << std::endl;
+                return std::move(J);
             };
-        com_ik.calcError = [this]()
+        com_ik.calcError = [&]()
             {
-                return this->target_com_pos - this->ioBody->centerOfMass();
+                return target_com_pos - ioBody->centerOfMass();
             };
-        ik_params.push_back(std::move(com_ik));
-   }
+        ik_params.emplace_back(std::move(com_ik));
+    }
 
     // COM Angular Velocity
     {
-        IKParam com_ang;
-        com_ang.target_type = ik_axisrot; // Angular Vel
-        com_ang.calcJacobian = [this]()
+        IKParam com_ang(ik_axisrot); // Angular Vel
+        com_ang.calcJacobian = [&]()
             {
-                Eigen::MatrixXd H;
-                cnoid::calcAngularMomentumJacobian(this->ioBody, nullptr, H);
-                return H;
+                Eigen::MatrixXd J;
+                cnoid::calcAngularMomentumJacobian(ioBody, nullptr, J); // RMC Eq.1 lower [H 0 I]
+                // std::cerr << "J:\n" << J << std::endl;
+                return std::move(J);
             };
-        com_ang.calcError = [this]()
+        com_ang.calcError = [&]()
             {
                 cnoid::Vector3 tmp_P, L;
-                this->ioBody->calcTotalMomentum(tmp_P, L);
+                ioBody->calcTotalMomentum(tmp_P, L);
                 return target_com_ang_vel - L;
             };
-        ik_params.push_back(std::move(com_ang));
+        ik_params.emplace_back(std::move(com_ang));
     }
 
     // End-effector IK parameters
     for (size_t i = 0; i < target_ee.size(); ++i) {
-        IKParam ee_ikparam;
-        ee_ikparam.target_type = ik_3daffine;
-        ee_ikparam.calcJacobian = [this, i]()
+        IKParam ee_ikparam(ik_3daffine);
+        ee_ikparam.calcJacobian = [&, i]()
             {
-                Eigen::MatrixXd J;
-                cnoid::setJacobian<0x3f, 0, 0>(*(this->ee_trans_vec[i].ee_path), this->ee_trans_vec[i].ee_path->endLink(), J);
-                return J;
+                auto ee_path = ee_trans_vec[i].ee_path;
+                const size_t path_numjoints = ee_path->numJoints();
+
+                Eigen::MatrixXd J_path(6, path_numjoints);
+                cnoid::setJacobian<0x3f, 0, 0>(*ee_path, ee_path->endLink(), J_path);
+
+                Eigen::MatrixXd J = Eigen::MatrixXd::Zero(6, 6 + ioBody->numJoints());
+                for (size_t idx = 0; idx < path_numjoints; ++idx) {
+                    J.col(ee_path->joint(idx)->jointId()) = std::move(J_path.col(idx));
+                }
+
+                Eigen::MatrixXd J_bodypart(6, 6);
+                J_bodypart << Eigen::Matrix3d::Identity(), cnoid::hat(ioBody->rootLink()->p() - ee_path->endLink()->p()),
+                              Eigen::Matrix3d::Zero(),     Eigen::Matrix3d::Identity();
+                J.block<6, 6>(0, ioBody->numJoints()) = std::move(J_bodypart);
+
+                // std::cerr << "J:\n" << J << std::endl;
+                return std::move(J);
             };
-        ee_ikparam.calcError = [this, i]()
+        ee_ikparam.calcError = [&, i]()
             {
                 cnoid::Vector6 error;
-                error.head<3>() = this->target_ee[i].translation() - this->ee_trans_vec[i].ee_path->endLink()->p();
-                error.segment<3>(3) = this->target_ee[i].linear() * cnoid::omegaFromRot(this->target_ee[i].linear().transpose() * this->ee_trans_vec[i].ee_path->endLink()->R());
-                return error;
+                error.head<3>() = target_ee[i].translation() - ee_trans_vec[i].ee_path->endLink()->p();
+                error.segment<3>(3) = target_ee[i].linear() * cnoid::omegaFromRot(target_ee[i].linear() * ee_trans_vec[i].ee_path->endLink()->R().transpose());
+                return std::move(error);
             };
-        ik_params.push_back(std::move(ee_ikparam));
+        ik_params.emplace_back(std::move(ee_ikparam));
     }
 
     return true;
@@ -471,35 +631,6 @@ void Balancer::calcFootOriginCoords (cnoid::Vector3& foot_origin_pos, cnoid::Mat
     // // rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
     // foot_origin_pos = tmpc.pos;
     // foot_origin_rot = tmpc.rot;
-}
-
-bool Balancer::startBalancer()
-{
-    return true;
-}
-
-bool Balancer::stopBalancer()
-{
-    return true;
-}
-
-bool Balancer::startJump(const double height, const double squat)
-{
-    control_mode = JUMPING;
-
-    const cnoid::Vector3 startPos = ioBody->calcCenterOfMass();
-    const cnoid::Vector3 start(startPos[2], 0, 0); // pos, vel, acc
-    const cnoid::Vector3 finish(startPos[2] + 0.15, sqrt(2 * G_ACC * height), G_ACC);
-    const minJerkCoeffTime coeff_time = calcMinJerkCoeffWithTimeInitJerkZero(start, finish);
-    std::copy(coeff_time.begin(), coeff_time.end() - 1, spline_coeff.begin()); // Remove time from coeff_time
-
-    control_endcount = loop + coeff_time.back() / m_dt;
-
-    // auto calcCOM = std::bind(calcNthOrderSpline, coeff, std::placeholders::_1);
-    // calc = calcNthOrderSpline(coeff); // curry
-
-    // setCOMCalcRule(std::bind(jumpControl, coeff), T);
-    return true;
 }
 
 /*

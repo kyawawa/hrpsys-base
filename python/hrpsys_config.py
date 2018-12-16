@@ -490,8 +490,6 @@ class HrpsysConfigurator(object):
         if self.ba:
             connectPorts(self.kf.port("rpy"), self.ba.port("rpy"))
             connectPorts(self.rh.port("q"), self.ba.port("qCurrent"))
-            if self.es:
-                connectPorts(self.es.port("q"), self.ba.port("qRef"))
             if StrictVersion(self.seq_version) >= StrictVersion('315.3.0'):
                 connectPorts(self.sh.port("basePosOut"), self.ba.port("basePosIn"))
                 connectPorts(self.sh.port("baseRpyOut"), self.ba.port("baseRpyIn"))
@@ -788,7 +786,7 @@ class HrpsysConfigurator(object):
         '''!@brief
         Get list of controller list that need to control joint angles
         '''
-        controller_list = [self.es, self.ic, self.gc, self.abc, self.st, self.co,
+        controller_list = [self.es, self.ic, self.gc, self.abc, self.st, self.ba, self.co,
                            self.tc, self.hes, self.el]
         return filter(lambda c: c != None, controller_list)  # only return existing controllers
 
@@ -943,6 +941,7 @@ class HrpsysConfigurator(object):
             for sen in filter(lambda x: x.type == "Force", self.sensors):
                 self.connectLoggerPort(self.rfu, "ref_"+sen.name+"Out")
         if self.ba != None:
+            self.connectLoggerPort(self.ba, 'q')
             for sen in filter(lambda x: x.type == "Force", self.sensors):
                 self.connectLoggerPort(self.ba, "ref_"+sen.name+"Out")
         if self.octd != None:

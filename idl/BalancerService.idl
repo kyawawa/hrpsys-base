@@ -62,6 +62,15 @@ module OpenHRP
        * @brief Stop Balancer
        * @return true if set successfully, false otherwise
        */
-      boolean stopBalancer();
+      boolean stopBalancer(in double migration_time);
+
+      /**
+       * @brief Start Jump
+       * @return true if set successfully, false otherwise
+       */
+      boolean startJump(in double height, in double squat);
+
+      boolean startSquat();
+      boolean stopSquat();
   };
 };

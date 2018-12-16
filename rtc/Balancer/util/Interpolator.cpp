@@ -8,6 +8,7 @@
 
 #include "Interpolator.h"
 #include <cmath>
+#include <iostream> // debug
 
 minJerkCoeff calcMinJerkCoeff(const Eigen::Vector3d& start, const Eigen::Vector3d& finish, const double T)
 {
@@ -47,6 +48,5 @@ minJerkCoeffTime calcMinJerkCoeffWithTimeInitJerkZero(const Eigen::Vector3d& sta
     const double a5 = 1 / (2 * T*T*T*T*T) * ((-2 * a2 + finish[2]) * T*T +
                                              (-6 * a1 - 6 * finish[1]) * T +
                                              12 * (-a0 + finish[0]));
-
     return minJerkCoeffTime{{a0, a1, a2, a3, a4, a5, T}};
 }

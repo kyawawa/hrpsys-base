@@ -6,9 +6,8 @@
  * @author Tatsuya Ishikawa
  */
 
-#include "Interpolator.h"
 #include <cmath>
-#include <iostream> // debug
+#include "Interpolator.h"
 
 minJerkCoeff calcMinJerkCoeff(const Eigen::Vector3d& start, const Eigen::Vector3d& finish, const double T)
 {

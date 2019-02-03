@@ -3,12 +3,13 @@
 #ifndef __KINEMATICS_H__
 #define __KINEMATICS_H__
 
-// #include <cnoid/EigenTypes>
-#include <cnoid/Body>
-#include <cnoid/Jacobian>
 #include <memory>
 #include <functional>
 #include <iostream>
+// #include <cnoid/EigenTypes>
+#include <cnoid/Body>
+#include <cnoid/Jacobian>
+
 enum IKTargetType {
     ik_3daffine, // AffineCompact3d
     ik_trans,    // 3d vector

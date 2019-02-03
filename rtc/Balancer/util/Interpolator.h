@@ -17,8 +17,6 @@ minJerkCoeff calcMinJerkCoeff(const Eigen::Vector3d& start, const Eigen::Vector3
 */
 minJerkCoeffTime calcMinJerkCoeffWithTimeInitJerkZero(const Eigen::Vector3d& start, const Eigen::Vector3d& finish);
 
-// double calcFifthOrderSpline(double t, const minJerkCoeff& coeff);
-
 template<size_t n>
 double calcNthOrderSpline(const std::array<double, n>& coeff, const double t)
 {

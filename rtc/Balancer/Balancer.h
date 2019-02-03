@@ -7,8 +7,8 @@
  * $Id$
  */
 
-#ifndef REFERENCEFORCEUPDATOR_COMPONENT_H
-#define REFERENCEFORCEUPDATOR_COMPONENT_H
+#ifndef BALANCER_COMPONENT_H
+#define BALANCER_COMPONENT_H
 
 #include <rtm/idl/BasicDataType.hh>
 #include <rtm/idl/ExtendedDataTypes.hh>
@@ -232,4 +232,4 @@ extern "C"
 void BalancerInit(RTC::Manager* manager);
 };
 
-#endif // REFERENCEFORCEUPDATOR_COMPONENT_H
+#endif // BALANCER_COMPONENT_H

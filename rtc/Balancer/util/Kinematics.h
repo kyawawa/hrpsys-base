@@ -62,6 +62,6 @@ bool solveWeightedWholebodyIK(cnoid::Position* position, // Floating base, set n
                               const double err_threshold = 1e-4,
                               const double dq_threshold = 1e-4,
                               const size_t max_iteration = 100,
-                              const double damping = 1e-1);
+                              const double bias = 1e-3);
 
 #endif // __KINEMATICS_H__

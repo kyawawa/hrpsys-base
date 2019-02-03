@@ -342,7 +342,7 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         // std::cerr << std::endl;
         solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
                                  ik_params, [this]() { this->calcFK(); },
-                                 1e-6, 1e-4, 100, 1e-1);
+                                 1e-6, 1e-4, 100, 1e-3);
         // std::cerr << "q aft: ";
         // for (auto joint : ioBody->joints()) {
         //     std::cerr << joint->q() << ", ";
@@ -367,7 +367,7 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         }
         solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
                                  ik_params, [this]() { this->calcFK(); },
-                                 1e-6, 1e-4, 100, 1e-1);
+                                 1e-6, 1e-4, 100, 1e-3);
     }
 
     setCurrentStates();

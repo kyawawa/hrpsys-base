@@ -36,7 +36,6 @@ bool solveWeightedWholebodyIK(cnoid::Position* position,
     Eigen::VectorXd IK_weight = Eigen::VectorXd::Ones(task_dof);
     Eigen::VectorXd error = Eigen::VectorXd::Zero(task_dof);
     Eigen::MatrixXd jacobian(task_dof, rank_c_space);
-    const Eigen::VectorXd bias_vec = bias * Eigen::VectorXd::Ones(rank_c_space);
 
     // Dirty code
     {
@@ -64,7 +63,7 @@ bool solveWeightedWholebodyIK(cnoid::Position* position,
             return true; // Completed
         }
 
-        const Eigen::MatrixXd damping_mat = (0.5 * error.transpose() * IK_weight.asDiagonal() * error + bias_vec).asDiagonal();
+        const Eigen::MatrixXd damping_mat = (0.5 * error.transpose() * IK_weight.asDiagonal() * error + bias) * Eigen::MatrixXd::Identity(rank_c_space, rank_c_space);
 
         // std::cerr << "jacobian:\n" << jacobian << std::endl;
 
@@ -74,7 +73,7 @@ bool solveWeightedWholebodyIK(cnoid::Position* position,
         // std::cout << (jacobian.transpose() * IK_weight.asDiagonal() * jacobian + Eigen::MatrixXd(bias_mat.asDiagonal())) << std::endl;
         // std::cerr << "jacobian:\n" << jacobian << std::endl;
         // std::cerr << "IK_weight: " << IK_weight.transpose() << std::endl;
-        // std::cerr << "inv: \n"  << (jacobian.transpose() * IK_weight.asDiagonal() * jacobian + bias_mat) << std::endl;
+        // std::cerr << "inv: \n"  << (jacobian.transpose() * IK_weight.asDiagonal() * jacobian + damping_mat) << std::endl;
 
         // const Eigen::VectorXd q_delta = (jacobian.transpose() * IK_weight.asDiagonal() * jacobian + bias_mat).inverse() *
         //     (jacobian.transpose() * IK_weight.asDiagonal() * error);

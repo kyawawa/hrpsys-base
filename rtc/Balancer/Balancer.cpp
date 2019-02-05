@@ -71,7 +71,6 @@ Balancer::Balancer(RTC::Manager* manager)
     m_qRefOut("q", m_qRef),
     m_basePosOut("basePosOut", m_basePos),
     // </rtc-template>
-    // m_robot(hrp::BodyPtr()),
     m_debugLevel(0)
 {
     m_BalancerService.balancer(this);
@@ -144,8 +143,8 @@ RTC::ReturnCode_t Balancer::onInitialize()
 
     {
         // check if the dof of ioBody match the number of joint in ioBody
-        int dof = ioBody->numJoints();
-        for (int i = 0; i < dof; i++) {
+        size_t dof = ioBody->numJoints();
+        for (size_t i = 0; i < dof; i++) {
             if (i != ioBody->joint(i)->jointId()) {
                 std::cerr << "[" << m_profile.instance_name << "] jointId is not equal to the index number" << std::endl;
                 return RTC::RTC_ERROR;
@@ -342,7 +341,7 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         // std::cerr << std::endl;
         solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
                                  ik_params, [this]() { this->calcFK(); },
-                                 1e-6, 1e-4, 100, 1e-3);
+                                 1e-6, 1e-4, 10, 1e-3);
         // std::cerr << "q aft: ";
         // for (auto joint : ioBody->joints()) {
         //     std::cerr << joint->q() << ", ";
@@ -367,7 +366,7 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
         }
         solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
                                  ik_params, [this]() { this->calcFK(); },
-                                 1e-6, 1e-4, 100, 1e-3);
+                                 1e-6, 1e-4, 10, 1e-3);
     }
 
     setCurrentStates();
@@ -595,7 +594,7 @@ bool Balancer::setIKLimbAsDefault()
             {
                 cnoid::Vector6 error;
                 error.head<3>() = target_ee[i].translation() - ee_trans_vec[i].ee_path->endLink()->p();
-                error.segment<3>(3) = target_ee[i].linear() * cnoid::omegaFromRot(target_ee[i].linear() * ee_trans_vec[i].ee_path->endLink()->R().transpose());
+                error.segment<3>(3) = cnoid::omegaFromRot(target_ee[i].linear() * ee_trans_vec[i].ee_path->endLink()->R().transpose());
                 return std::move(error);
             };
         ik_params.emplace_back(std::move(ee_ikparam));

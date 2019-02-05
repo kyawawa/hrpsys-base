@@ -10,6 +10,11 @@
 #ifndef BALANCER_COMPONENT_H
 #define BALANCER_COMPONENT_H
 
+#include <memory>
+#include <mutex>
+
+#include <rtm/idl/BasicDataTypeSkel.h>
+#include <rtm/idl/ExtendedDataTypesSkel.h>
 #include <rtm/idl/BasicDataType.hh>
 #include <rtm/idl/ExtendedDataTypes.hh>
 #include <rtm/Manager.h>
@@ -17,18 +22,11 @@
 #include <rtm/CorbaPort.h>
 #include <rtm/DataInPort.h>
 #include <rtm/DataOutPort.h>
-#include <rtm/idl/BasicDataTypeSkel.h>
-#include <rtm/idl/ExtendedDataTypesSkel.h>
-// #include <hrpModel/Body.h>
-// #include "../ImpedanceController/JointPathEx.h"
-// #include "../ImpedanceController/RatsMatrix.h"
-// #include "../SequencePlayer/interpolator.h"
-// #include "../TorqueFilter/IIRFilter.h"
 
-#include <memory>
 #include <cnoid/Body>
 #include <cnoid/JointPath>
 #include <cnoid/EigenTypes>
+
 #include "util/Kinematics.h"
 #include "util/Interpolator.h"
 
@@ -172,15 +170,15 @@ class Balancer
 
   private:
     unsigned m_debugLevel;
-    coil::Mutex m_mutex;
+    std::mutex m_mutex;
     double m_dt;
 
     // States
-    enum ControlMode {
-        NOCONTROL,
-        SYNC_TO_IDLE,
-        SYNC_TO_NOCONTROL,
-        IDLE,
+    enum class ControlMode : size_t {
+        NOCONTROL = 0,
+        SYNC_TO_IDLE = 1,
+        SYNC_TO_NOCONTROL = 2,
+        IDLE = 3,
         JUMPING,
         SQUAT,
     } control_mode;

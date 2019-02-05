@@ -11,11 +11,11 @@
 #include <iomanip>
 // #include "hrpsys/util/VectorConvert.h"
 // #include "hrpsys/util/Hrpsys.h"
-#include "Balancer.h"
 #include <cnoid/BodyLoader>
 #include <cnoid/ForceSensor>
 #include <cnoid/EigenUtil>
 // #include <cnoid/Referenced>
+#include "Balancer.h"
 #include "util/Interpolator.h"
 
 using Guard = coil::Guard<coil::Mutex>;
@@ -110,7 +110,7 @@ RTC::ReturnCode_t Balancer::onInitialize()
     loop = 0;
     control_startcount = 0;
     control_endcount = 0;
-    control_mode = NOCONTROL;
+    control_mode = ControlMode::NOCONTROL;
 
     // Get dt
     RTC::Properties& prop = getProperties(); // get properties information from .wrl file
@@ -301,12 +301,14 @@ RTC::ReturnCode_t Balancer::onDeactivated(RTC::UniqueId ec_id)
 RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
 {
     ++loop;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
     readInPortData();
 
-    if (control_mode >= SYNC_TO_NOCONTROL) getCurrentStates();
+    if (control_mode >= ControlMode::SYNC_TO_NOCONTROL) getCurrentStates();
 
-    if (control_mode == SYNC_TO_NOCONTROL) {
-        if (loop > control_endcount) control_mode = NOCONTROL;
+    if (control_mode == ControlMode::SYNC_TO_NOCONTROL) {
+        if (loop >= control_endcount) control_mode = ControlMode::NOCONTROL;
         {
             size_t i = 0;
             for (auto joint : ioBody->joints()) {
@@ -314,43 +316,24 @@ RTC::ReturnCode_t Balancer::onExecute(RTC::UniqueId ec_id)
                 ++i;
             }
         }
-    } else if (control_mode == JUMPING) {
-        if (loop > control_endcount) control_mode = IDLE;
+    } else if (control_mode == ControlMode::JUMPING) {
+        if (loop > control_endcount) control_mode = ControlMode::IDLE;
         target_com_pos = ioBody->centerOfMass();
-        // std::cerr << "cur com z: " << target_com_pos[2] << std::endl;
+        // TODO: なぜかcurrent com Z と start時のcom Zがだいぶ異なる
+        std::cerr << "cur/ref com z: " << target_com_pos[2] << " ";
         target_com_pos[2] = calcNthOrderSpline(spline_coeff, (loop - control_startcount) * m_dt);
-        // std::cerr << "ref com z: " << target_com_pos[2] << std::endl;
+        std::cerr << target_com_pos[2] << std::endl;
         target_com_ang_vel = cnoid::Vector3::Zero();
         for (size_t i = 0; i < target_ee.size(); ++i) {
             target_ee[i].translation() = ee_trans_vec[i].ee_path->endLink()->p();
             target_ee[i].linear() = ee_trans_vec[i].ee_path->endLink()->R();
         }
 
-        // std::cerr << "root_t1: \n" << ioBody->rootLink()->T().matrix() << std::endl;
-
-        // solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
-        //                          ik_params,
-        //                          [this] () { this->ioBody->calcForwardKinematics(); this->ioBody->calcCenterOfMass();
-        //                              std::cerr << "root_t2: \n" << this->ioBody->rootLink()->T().matrix() << std::endl;
-        //                          },
-        //                          1e-2, 10, 1e-1);
-        // std::cerr << "q bef: ";
-        // for (auto joint : ioBody->joints()) {
-        //     std::cerr << joint->q() << ", ";
-        // }
-        // std::cerr << std::endl;
         solveWeightedWholebodyIK(&(ioBody->rootLink()->T()), ioBody->joints(),
                                  ik_params, [this]() { this->calcFK(); },
                                  1e-6, 1e-4, 10, 1e-3);
-        // std::cerr << "q aft: ";
-        // for (auto joint : ioBody->joints()) {
-        //     std::cerr << joint->q() << ", ";
-        // }
-        // std::cerr << std::endl;
-
-        // std::cerr << "root_t2: \n" << ioBody->rootLink()->T().matrix() << std::endl;
     }
-    else if (control_mode == SQUAT) {
+    else if (control_mode == ControlMode::SQUAT) { // Debug
         static double target = ioBody->centerOfMass()[2];
         target_com_pos = ioBody->centerOfMass();
         std::cerr << "current com pos: " << target_com_pos[2] << std::endl;
@@ -402,7 +385,7 @@ inline void Balancer::readInPortData()
 
     // Get force sensor values
     // Force sensor's force value is absolute in reference frame
-    auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
+    const auto fsensors = ioBody->devices<cnoid::ForceSensor>().getSortedById();
     for (size_t i = 0, n = m_force.size(); i < n; ++i) {
         act_force[i] = fsensors[i]->link()->R() * fsensors[i]->R_local() *
             cnoid::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
@@ -445,7 +428,8 @@ inline void Balancer::setCurrentStates()
 
 bool Balancer::startBalancer()
 {
-    control_mode = SYNC_TO_IDLE;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    control_mode = ControlMode::SYNC_TO_IDLE;
     std::cerr << "[" << m_profile.instance_name << "] start Balancer" << std::endl;
     return true;
 }
@@ -454,7 +438,8 @@ bool Balancer::stopBalancer(const double migration_time)
 {
     std::cerr << "[" << m_profile.instance_name << "] stop Balancer" << std::endl;
 
-    control_mode = SYNC_TO_NOCONTROL;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    control_mode = ControlMode::SYNC_TO_NOCONTROL;
     control_startcount = loop;
     control_endcount = loop + migration_time / m_dt;
 
@@ -473,14 +458,21 @@ bool Balancer::stopBalancer(const double migration_time)
 
 bool Balancer::startJump(const double height, const double squat)
 {
-    control_mode = JUMPING;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    control_mode = ControlMode::JUMPING;
+    calcFK();
 
-    const cnoid::Vector3 startPos = ioBody->calcCenterOfMass();
+    const cnoid::Vector3 startPos = ioBody->centerOfMass();
     const cnoid::Vector3 start(startPos[2], 0, 0); // pos, vel, acc
-    const cnoid::Vector3 finish(startPos[2] + 0.15, sqrt(2 * -G_ACC * height), G_ACC);
+    const cnoid::Vector3 finish(startPos[2] + 0.25, sqrt(2 * -G_ACC * height), G_ACC);
     const minJerkCoeffTime coeff_time = calcMinJerkCoeffWithTimeInitJerkZero(start, finish);
+
     std::copy(coeff_time.begin(), coeff_time.end() - 1, spline_coeff.begin()); // Remove time from coeff_time
 
+    ik_params[0].IK_weight[0] = 0.7; // CoM X
+    ik_params[0].IK_weight[1] = 0.7; // CoM Y
+    ik_params[1].IK_weight[1] = 0;   // CoM Angular Momentum Y
+    ik_params[1].IK_weight[2] = 0;   // CoM Angular Momentum Z
     control_startcount = loop;
     control_endcount = loop + coeff_time.back() / m_dt;
 
@@ -493,7 +485,8 @@ bool Balancer::startJump(const double height, const double squat)
 
 bool Balancer::startSquat()
 {
-    control_mode = SQUAT;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    control_mode = ControlMode::SQUAT;
     control_startcount = loop;
     ik_params[1].IK_weight *= 0; // CoM Angular Momentum
     return true;
@@ -501,7 +494,8 @@ bool Balancer::startSquat()
 
 bool Balancer::stopSquat()
 {
-    control_mode = IDLE;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    control_mode = ControlMode::IDLE;
     return true;
 }
 

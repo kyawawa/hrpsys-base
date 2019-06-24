@@ -7,15 +7,16 @@
  * $Id$
  */
 
-#include <rtm/CorbaNaming.h>
 #include <hrpModel/Link.h>
 #include <hrpModel/Sensor.h>
-#include <hrpModel/ModelLoaderUtil.h>
 #include "AutoBalancer.h"
 #include <hrpModel/JointPath.h>
 #include <hrpUtil/MatrixSolvers.h>
 #include "hrpsys/util/Hrpsys.h"
 
+#ifndef DEBUGP
+#define DEBUGP ((m_debugLevel==1 && loop%200==0) || m_debugLevel > 1 )
+#endif
 
 typedef coil::Guard<coil::Mutex> Guard;
 using namespace rats;
@@ -49,6 +50,17 @@ static std::ostream& operator<<(std::ostream& os, const struct RTC::Time &tm)
        << std::setprecision(pre);
     os.unsetf(std::ios::fixed);
     return os;
+}
+
+static inline double calcInteriorPoint(const double start, const double end, const double ratio)
+{
+    return (1 - ratio) * start + ratio * end;
+}
+
+template<typename T>
+static inline T calcInteriorPoint(const T& start, const T& end, const double ratio)
+{
+    return (1 - ratio) * start + ratio * end;
 }
 
 AutoBalancer::AutoBalancer(RTC::Manager* manager)
@@ -88,8 +100,23 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
 
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
-      gait_type(BIPED),
       m_robot(hrp::BodyPtr()),
+      loop(0),
+      control_mode(MODE_IDLE),
+      is_legged_robot(false),
+      gait_type(BIPED),
+      gg_is_walking(false),
+      gg_solved(false),
+      fix_leg_coords(coordinates()),
+      sbp_offset(hrp::Vector3::Zero()),
+      sbp_cog_offset(hrp::Vector3::Zero()),
+      use_force(MODE_REF_FORCE),
+      prev_imu_sensor_vel(hrp::Vector3::Zero()),
+      graspless_manip_mode(false),
+      graspless_manip_arm("arms"),
+      graspless_manip_p_gain(hrp::Vector3::Zero()),
+      is_stop_mode(false),
+      is_hand_fix_mode(false),
       m_debugLevel(0)
 {
     m_service0.autobalancer(this);
@@ -148,7 +175,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
     // </rtc-template>
 
-    RTC::Properties& prop =  getProperties();
+    RTC::Properties& prop = getProperties();
     coil::stringTo(m_dt, prop["dt"].c_str());
 
     // TODO: 関数化
@@ -173,22 +200,13 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     m_qRef.data.length(m_robot->numJoints());
     m_baseTform.data.length(12);
 
-    // TODO: コンストラクタ
-    control_mode = MODE_IDLE;
-    loop = 0;
-    // TODO end
-
-    // setting from conf file
-    leg_names.push_back("rleg");
-    leg_names.push_back("lleg");
-
     // Generate FIK
     fik = fikPtr(new SimpleFullbodyInverseKinematicsSolver(m_robot, std::string(m_profile.instance_name), m_dt));
 
     // setting from conf file
     // rleg,TARGET_LINK,BASE_LINK
-    coil::vstring end_effectors_str = coil::split(prop["end_effectors"], ",");
-    size_t prop_num = 10;
+    const coil::vstring end_effectors_str = coil::split(prop["end_effectors"], ",");
+    const size_t prop_num = 10;
     if (end_effectors_str.size() > 0) {
         size_t num = end_effectors_str.size() / prop_num;
         for (size_t i = 0; i < num; i++) {
@@ -318,6 +336,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                 }
             }
 
+            leg_names.push_back("rleg");
+            leg_names.push_back("lleg");
+
             // setting stride limitations from conf file
             double stride_fwd_x_limit      = 0.15;
             double stride_outside_y_limit  = 0.05;
@@ -339,9 +360,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     }
 
     // TODO: default constructor
-    gg_is_walking = gg_solved = false;
     m_walkingStates.data = false;
-    fix_leg_coords = coordinates();
 
     // load virtual force sensors
     readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
@@ -366,17 +385,17 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     m_ref_forceOut.resize(nforce);
     m_limbCOPOffset.resize(nforce);
     m_limbCOPOffsetOut.resize(nforce);
-    for (unsigned int i=0; i<npforce; i++){
+    for (unsigned int i = 0; i < npforce; i++) {
         sensor_names.push_back(m_robot->sensor(hrp::Sensor::FORCE, i)->name);
     }
-    for (unsigned int i=0; i<nvforce; i++){
+    for (unsigned int i = 0; i < nvforce; i++) {
         for ( std::map<std::string, hrp::VirtualForceSensorParam>::iterator it = m_vfs.begin(); it != m_vfs.end(); it++ ) {
             if (it->second.id == (int)i) sensor_names.push_back(it->first);
         }
     }
     // set ref force port
     std::cerr << "[" << m_profile.instance_name << "] force sensor ports (" << nforce << ")" << std::endl;
-    for (unsigned int i = 0; i < nforce; i++){
+    for (unsigned int i = 0; i < nforce; i++) {
         m_ref_forceIn[i] = new InPort<TimedDoubleSeq>(std::string("ref_"+sensor_names[i]).c_str(), m_ref_force[i]);
         m_ref_force[i].data.length(6);
         registerInPort(std::string("ref_"+sensor_names[i]).c_str(), *m_ref_forceIn[i]);
@@ -385,7 +404,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         ref_moments.push_back(hrp::Vector3(0, 0, 0));
     }
     // set force port
-    for (unsigned int i = 0; i < nforce; i++){
+    for (unsigned int i = 0; i < nforce; i++) {
         m_ref_forceOut[i] = new OutPort<TimedDoubleSeq>(std::string(sensor_names[i]).c_str(), m_force[i]);
         m_force[i].data.length(6);
         m_force[i].data[0] = m_force[i].data[1] = m_force[i].data[2] = 0.0;
@@ -402,28 +421,12 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         m_limbCOPOffset[i].data.x = m_limbCOPOffset[i].data.y = m_limbCOPOffset[i].data.z = 0.0;
         std::cerr << "[" << m_profile.instance_name << "]   name = " << nm << std::endl;
     }
-    sbp_offset = hrp::Vector3(0,0,0);
-    sbp_cog_offset = hrp::Vector3(0,0,0);
-    //use_force = MODE_NO_FORCE;
-    use_force = MODE_REF_FORCE;
 
-    if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) {
-        is_legged_robot = true;
-    } else {
-        is_legged_robot = false;
-    }
+    if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) is_legged_robot = true;
 
     m_accRef.data.ax = m_accRef.data.ay = m_accRef.data.az = 0.0;
-    prev_imu_sensor_vel = hrp::Vector3::Zero();
 
-    graspless_manip_mode = false;
-    graspless_manip_arm = "arms";
-    graspless_manip_p_gain = hrp::Vector3::Zero();
-
-    is_stop_mode = false;
-    is_hand_fix_mode = false;
-
-    hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+    const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
     if (sen == NULL) { // TODO: nullptr? 対応してるか要確認
         std::cerr << "[" << m_profile.instance_name
                   << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
@@ -479,15 +482,199 @@ RTC::ReturnCode_t AutoBalancer::onDeactivated(RTC::UniqueId ec_id)
     return RTC::RTC_OK;
 }
 
-#define DEBUGP ((m_debugLevel==1 && loop%200==0) || m_debugLevel > 1 )
-//#define DEBUGP2 ((loop%200==0))
-#define DEBUGP2 (false)
 RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 {
     // std::cerr << "AutoBalancer::onExecute(" << ec_id << ")" << std::endl;
+    readInportData();
     loop++;
 
-    // Read Inport
+    // Calculation
+    Guard guard(m_mutex); // TODO: スコープ確認
+
+    if ( is_legged_robot ) {
+        hrp::Vector3 ref_basePos;
+        hrp::Matrix33 ref_baseRot;
+        hrp::Vector3 rel_ref_zmp; // ref zmp in base frame
+
+        // For parameters
+        fik->storeCurrentParameters();
+        getTargetParameters();
+
+        // Get transition ratio
+        const bool is_transition_interpolator_empty = transition_interpolator->isEmpty();
+        if (!is_transition_interpolator_empty) {
+            transition_interpolator->get(&transition_interpolator_ratio, true);
+        } else {
+            transition_interpolator_ratio = (control_mode == MODE_IDLE) ? 0.0 : 1.0;
+        }
+
+        if (control_mode != MODE_IDLE ) {
+            solveFullbodyIK();
+//        /////// Inverse Dynamics /////////
+//        if(!idsb.is_initialized){
+//          idsb.setInitState(m_robot, m_dt);
+//          invdyn_zmp_filters.resize(3);
+//          for(int i = 0;i < 3;i++){
+//            invdyn_zmp_filters[i].setParameterAsBiquad(25, 1/std::sqrt(2), 1.0/m_dt);
+//            invdyn_zmp_filters[i].reset(ref_zmp(i));
+//          }
+//        }
+//        calcAccelerationsForInverseDynamics(m_robot, idsb);
+//        if(gg_is_walking){
+//          calcWorldZMPFromInverseDynamics(m_robot, idsb, ref_zmp);
+//          for(int i = 0;i < 3;i++) ref_zmp(i) = invdyn_zmp_filters[i].passFilter(ref_zmp(i));
+//        }
+//        updateInvDynStateBuffer(idsb);
+
+            rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
+        } else {
+            rel_ref_zmp = input_zmp;
+            fik->d_root_height = 0.0;
+        }
+
+        // Transition
+        if (!is_transition_interpolator_empty) {
+            // transition_interpolator_ratio 0=>1 : IDLE => ABC
+            // transition_interpolator_ratio 1=>0 : ABC => IDLE
+            ref_basePos = calcInteriorPoint(input_basePos, m_robot->rootLink()->p, transition_interpolator_ratio);
+            rel_ref_zmp = calcInteriorPoint(input_zmp, rel_ref_zmp, transition_interpolator_ratio);
+            rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
+
+            for (unsigned int i = 0; i < m_robot->numJoints(); i++) {
+                m_robot->joint(i)->q = calcInteriorPoint(m_qRef.data[i], m_robot->joint(i)->q, transition_interpolator_ratio);
+            }
+
+            for (unsigned int i = 0; i < m_force.size(); i++) {
+                for (unsigned int j = 0; j < 6; j++) {
+                    m_force[i].data[j] = calcInteriorPoint(m_force[i].data[j], m_ref_force[i].data[j], transition_interpolator_ratio);
+                }
+            }
+
+            for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
+                // transition (TODO:set stopABCmode value instead of 0)
+                m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;// + (1-transition_interpolator_ratio) * 0;
+                m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;// + (1-transition_interpolator_ratio) * 0;
+                m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;// + (1-transition_interpolator_ratio) * 0;
+            }
+        } else {
+            ref_basePos = m_robot->rootLink()->p;
+            ref_baseRot = m_robot->rootLink()->R;
+        }
+
+        // mode change for sync
+        if (control_mode == MODE_SYNC_TO_ABC) {
+            control_mode = MODE_ABC;
+        } else if (control_mode == MODE_SYNC_TO_IDLE && transition_interpolator->isEmpty()) {
+            std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
+                      << "] Finished cleanup" << std::endl;
+            control_mode = MODE_IDLE;
+        }
+
+        // Write outport data for legged robot
+        {
+            m_basePos.tm = m_qRef.tm;
+            m_basePos.data.x = ref_basePos(0);
+            m_basePos.data.y = ref_basePos(1);
+            m_basePos.data.z = ref_basePos(2);
+            m_basePosOut.write();
+
+            const hrp::Vector3 baseRpy = hrp::rpyFromRot(ref_baseRot);
+            m_baseRpy.tm = m_qRef.tm;
+            m_baseRpy.data.r = baseRpy(0);
+            m_baseRpy.data.p = baseRpy(1);
+            m_baseRpy.data.y = baseRpy(2);
+            m_baseRpyOut.write();
+
+            double *tform_arr = m_baseTform.data.get_buffer();
+            m_baseTform.tm = m_qRef.tm;
+            tform_arr[0] = m_basePos.data.x;
+            tform_arr[1] = m_basePos.data.y;
+            tform_arr[2] = m_basePos.data.z;
+            hrp::setMatrix33ToRowMajorArray(ref_baseRot, tform_arr, 3);
+            m_baseTformOut.write();
+
+            m_basePose.tm = m_qRef.tm;
+            m_basePose.data.position.x = m_basePos.data.x;
+            m_basePose.data.position.y = m_basePos.data.y;
+            m_basePose.data.position.z = m_basePos.data.z;
+            m_basePose.data.orientation.r = m_baseRpy.data.r;
+            m_basePose.data.orientation.p = m_baseRpy.data.p;
+            m_basePose.data.orientation.y = m_baseRpy.data.y;
+            m_basePoseOut.write();
+
+            m_zmp.tm = m_qRef.tm;
+            m_zmp.data.x = rel_ref_zmp(0);
+            m_zmp.data.y = rel_ref_zmp(1);
+            m_zmp.data.z = rel_ref_zmp(2);
+            m_zmpOut.write();
+
+            m_cog.tm = m_qRef.tm;
+            m_cog.data.x = ref_cog(0);
+            m_cog.data.y = ref_cog(1);
+            m_cog.data.z = ref_cog(2);
+            m_cogOut.write();
+
+            m_sbpCogOffset.tm = m_qRef.tm;
+            m_sbpCogOffset.data.x = sbp_cog_offset(0);
+            m_sbpCogOffset.data.y = sbp_cog_offset(1);
+            m_sbpCogOffset.data.z = sbp_cog_offset(2);
+            m_sbpCogOffsetOut.write();
+
+            // reference acceleration
+            const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+            if (sen != NULL) {
+                const hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
+                const hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos) / m_dt;
+                // convert to imu sensor local acceleration
+                const hrp::Vector3 acc = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel) / m_dt;
+                prev_imu_sensor_pos = imu_sensor_pos;
+                prev_imu_sensor_vel = imu_sensor_vel;
+
+                m_accRef.data.ax = acc(0);
+                m_accRef.data.ay = acc(1);
+                m_accRef.data.az = acc(2);
+                m_accRefOut.write();
+            }
+
+            // control parameters
+            m_contactStates.tm = m_qRef.tm;
+            m_contactStatesOut.write();
+            m_controlSwingSupportTime.tm = m_qRef.tm;
+            m_controlSwingSupportTimeOut.write();
+
+            m_toeheelRatio.tm = m_qRef.tm;
+            m_toeheelRatioOut.write();
+
+            m_walkingStates.tm = m_qRef.tm;
+            m_walkingStates.data = gg_is_walking;
+            m_walkingStatesOut.write();
+
+            for (unsigned int i = 0; i < m_ref_forceOut.size(); i++){
+                m_force[i].tm = m_qRef.tm;
+                m_ref_forceOut[i]->write();
+            }
+
+            for (unsigned int i = 0; i < m_limbCOPOffsetOut.size(); i++){
+                m_limbCOPOffset[i].tm = m_qRef.tm;
+                m_limbCOPOffsetOut[i]->write();
+            }
+        }
+
+        {
+            const unsigned int qRef_length = m_qRef.data.length();
+            for (unsigned int i = 0; i < qRef_length; i++) {
+                m_qRef.data[i] = m_robot->joint(i)->q;
+            }
+        }
+    }
+
+    if (m_qRef.data.length() != 0) m_qOut.write();
+
+    return RTC::RTC_OK;
+}
+
+void AutoBalancer::readInportData()
+{
     if (m_qRefIn.isNew()) m_qRefIn.read();
     if (m_basePosIn.isNew()) {
         m_basePosIn.read();
@@ -531,177 +718,6 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         }
         gg->set_act_contact_states(act_contacts);
     }
-
-    // Calculation
-    Guard guard(m_mutex); // TODO: スコープ確認
-    hrp::Vector3 ref_basePos;
-    hrp::Matrix33 ref_baseRot;
-    hrp::Vector3 rel_ref_zmp; // ref zmp in base frame
-    if ( is_legged_robot ) {
-        // For parameters
-        fik->storeCurrentParameters();
-        getTargetParameters();
-        // Get transition ratio
-        bool is_transition_interpolator_empty = transition_interpolator->isEmpty();
-        if (!is_transition_interpolator_empty) {
-            transition_interpolator->get(&transition_interpolator_ratio, true);
-        } else {
-            transition_interpolator_ratio = (control_mode == MODE_IDLE) ? 0.0 : 1.0;
-        }
-        if (control_mode != MODE_IDLE ) {
-            solveFullbodyIK();
-//        /////// Inverse Dynamics /////////
-//        if(!idsb.is_initialized){
-//          idsb.setInitState(m_robot, m_dt);
-//          invdyn_zmp_filters.resize(3);
-//          for(int i = 0;i < 3;i++){
-//            invdyn_zmp_filters[i].setParameterAsBiquad(25, 1/std::sqrt(2), 1.0/m_dt);
-//            invdyn_zmp_filters[i].reset(ref_zmp(i));
-//          }
-//        }
-//        calcAccelerationsForInverseDynamics(m_robot, idsb);
-//        if(gg_is_walking){
-//          calcWorldZMPFromInverseDynamics(m_robot, idsb, ref_zmp);
-//          for(int i = 0;i < 3;i++) ref_zmp(i) = invdyn_zmp_filters[i].passFilter(ref_zmp(i));
-//        }
-//        updateInvDynStateBuffer(idsb);
-
-            rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
-        } else {
-            rel_ref_zmp = input_zmp;
-            fik->d_root_height = 0.0;
-        }
-        // Transition
-        if (!is_transition_interpolator_empty) {
-            // transition_interpolator_ratio 0=>1 : IDLE => ABC
-            // transition_interpolator_ratio 1=>0 : ABC => IDLE
-            ref_basePos = (1-transition_interpolator_ratio) * input_basePos + transition_interpolator_ratio * m_robot->rootLink()->p;
-            rel_ref_zmp = (1-transition_interpolator_ratio) * input_zmp + transition_interpolator_ratio * rel_ref_zmp;
-            rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
-            for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ) {
-                m_robot->joint(i)->q = (1-transition_interpolator_ratio) * m_qRef.data[i] + transition_interpolator_ratio * m_robot->joint(i)->q;
-            }
-            for (unsigned int i = 0; i < m_force.size(); i++) {
-                for (unsigned int j=0; j<6; j++) {
-                    m_force[i].data[j] = transition_interpolator_ratio * m_force[i].data[j] + (1-transition_interpolator_ratio) * m_ref_force[i].data[j];
-                }
-                     }
-            for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
-                // transition (TODO:set stopABCmode value instead of 0)
-                m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;// + (1-transition_interpolator_ratio) * 0;
-                m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;// + (1-transition_interpolator_ratio) * 0;
-                m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;// + (1-transition_interpolator_ratio) * 0;
-            }
-        } else {
-            ref_basePos = m_robot->rootLink()->p;
-            ref_baseRot = m_robot->rootLink()->R;
-        }
-        // mode change for sync
-        if (control_mode == MODE_SYNC_TO_ABC) {
-            control_mode = MODE_ABC;
-        } else if (control_mode == MODE_SYNC_TO_IDLE && transition_interpolator->isEmpty() ) {
-            std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
-                      << "] Finished cleanup" << std::endl;
-            control_mode = MODE_IDLE;
-        }
-    }
-
-    // Write Outport
-    if ( m_qRef.data.length() != 0 ) { // initialized
-        if (is_legged_robot) {
-            for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ){
-                m_qRef.data[i] = m_robot->joint(i)->q;
-            }
-        }
-        m_qOut.write();
-    }
-    if (is_legged_robot) {
-        // basePos
-        m_basePos.data.x = ref_basePos(0);
-        m_basePos.data.y = ref_basePos(1);
-        m_basePos.data.z = ref_basePos(2);
-        m_basePos.tm = m_qRef.tm;
-        // baseRpy
-        hrp::Vector3 baseRpy = hrp::rpyFromRot(ref_baseRot);
-        m_baseRpy.data.r = baseRpy(0);
-        m_baseRpy.data.p = baseRpy(1);
-        m_baseRpy.data.y = baseRpy(2);
-        m_baseRpy.tm = m_qRef.tm;
-        // baseTform
-        double *tform_arr = m_baseTform.data.get_buffer();
-        tform_arr[0] = m_basePos.data.x;
-        tform_arr[1] = m_basePos.data.y;
-        tform_arr[2] = m_basePos.data.z;
-        hrp::setMatrix33ToRowMajorArray(ref_baseRot, tform_arr, 3);
-        m_baseTform.tm = m_qRef.tm;
-        // basePose
-        m_basePose.data.position.x = m_basePos.data.x;
-        m_basePose.data.position.y = m_basePos.data.y;
-        m_basePose.data.position.z = m_basePos.data.z;
-        m_basePose.data.orientation.r = m_baseRpy.data.r;
-        m_basePose.data.orientation.p = m_baseRpy.data.p;
-        m_basePose.data.orientation.y = m_baseRpy.data.y;
-        m_basePose.tm = m_qRef.tm;
-        // zmp
-        m_zmp.data.x = rel_ref_zmp(0);
-        m_zmp.data.y = rel_ref_zmp(1);
-        m_zmp.data.z = rel_ref_zmp(2);
-        m_zmp.tm = m_qRef.tm;
-        // cog
-        m_cog.data.x = ref_cog(0);
-        m_cog.data.y = ref_cog(1);
-        m_cog.data.z = ref_cog(2);
-        m_cog.tm = m_qRef.tm;
-        // sbpCogOffset
-        m_sbpCogOffset.data.x = sbp_cog_offset(0);
-        m_sbpCogOffset.data.y = sbp_cog_offset(1);
-        m_sbpCogOffset.data.z = sbp_cog_offset(2);
-        m_sbpCogOffset.tm = m_qRef.tm;
-        // write
-        m_basePosOut.write();
-        m_baseRpyOut.write();
-        m_baseTformOut.write();
-        m_basePoseOut.write();
-        m_zmpOut.write();
-        m_cogOut.write();
-        m_sbpCogOffsetOut.write();
-
-        // reference acceleration
-        hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-        if (sen != NULL) {
-            hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
-            hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos)/m_dt;
-            // convert to imu sensor local acceleration
-            hrp::Vector3 acc = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel)/m_dt;
-            m_accRef.data.ax = acc(0); m_accRef.data.ay = acc(1); m_accRef.data.az = acc(2);
-            m_accRefOut.write();
-            prev_imu_sensor_pos = imu_sensor_pos;
-            prev_imu_sensor_vel = imu_sensor_vel;
-        }
-
-        // control parameters
-        m_contactStates.tm = m_qRef.tm;
-        m_contactStatesOut.write();
-        m_controlSwingSupportTime.tm = m_qRef.tm;
-        m_controlSwingSupportTimeOut.write();
-        m_toeheelRatio.tm = m_qRef.tm;
-        m_toeheelRatioOut.write();
-        m_walkingStates.data = gg_is_walking;
-        m_walkingStates.tm = m_qRef.tm;
-        m_walkingStatesOut.write();
-
-        for (unsigned int i = 0; i < m_ref_forceOut.size(); i++){
-            m_force[i].tm = m_qRef.tm;
-            m_ref_forceOut[i]->write();
-        }
-
-        for (unsigned int i = 0; i < m_limbCOPOffsetOut.size(); i++){
-            m_limbCOPOffset[i].tm = m_qRef.tm;
-            m_limbCOPOffsetOut[i]->write();
-        }
-    }
-
-    return RTC::RTC_OK;
 }
 
 void AutoBalancer::getTargetParameters()

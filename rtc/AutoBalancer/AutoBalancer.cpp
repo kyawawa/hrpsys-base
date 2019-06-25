@@ -2,7 +2,7 @@
 /*!
  * @file  AutoBalancer.cpp
  * @brief autobalancer component
- * $Date$
+ * @date  $Date$
  *
  * $Id$
  */
@@ -15,7 +15,7 @@
 #include "hrpsys/util/Hrpsys.h"
 
 #ifndef DEBUGP
-#define DEBUGP ((m_debugLevel==1 && loop%200==0) || m_debugLevel > 1 )
+#define DEBUGP ((m_debugLevel == 1 && loop % 200 == 0) || m_debugLevel > 1)
 #endif
 
 typedef coil::Guard<coil::Mutex> Guard;
@@ -208,8 +208,8 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     const coil::vstring end_effectors_str = coil::split(prop["end_effectors"], ",");
     const size_t prop_num = 10;
     if (end_effectors_str.size() > 0) {
-        size_t num = end_effectors_str.size() / prop_num;
-        for (size_t i = 0; i < num; i++) {
+        const size_t ee_num = end_effectors_str.size() / prop_num;
+        for (size_t i = 0; i < ee_num; i++) {
             std::string ee_name, ee_target, ee_base;
             // TODO: 手動でprop_numに足していきたくない idx++とかを使いたい
             coil::stringTo(ee_name, end_effectors_str[i*prop_num].c_str());
@@ -264,14 +264,20 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
             tp.target_link = m_robot->link(ee_target);
             ikp.insert(std::pair<std::string, ABCIKparam>(ee_name , tp));
             ee_vec.push_back(ee_name);
-            std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "]" << std::endl;
-            std::cerr << "[" << m_profile.instance_name << "]   target = " << ikp[ee_name].target_link->name << ", base = " << ee_base << std::endl;
-            std::cerr << "[" << m_profile.instance_name << "]   offset_pos = " << tp.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
-            std::cerr << "[" << m_profile.instance_name << "]   has_toe_joint = " << (tp.has_toe_joint?"true":"false") << std::endl;
+            std::cerr << "[" << m_profile.instance_name
+                      << "] End Effector [" << ee_name << "]" << std::endl;
+            std::cerr << "[" << m_profile.instance_name
+                      << "]   target = " << ikp[ee_name].target_link->name
+                      << ", base = " << ee_base << std::endl;
+            std::cerr << "[" << m_profile.instance_name << "]   offset_pos = "
+                      << tp.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]"))
+                      << "[m]" << std::endl;
+            std::cerr << "[" << m_profile.instance_name << "]   has_toe_joint = "
+                      << (tp.has_toe_joint?"true":"false") << std::endl;
             contact_states_index_map.insert(std::pair<std::string, size_t>(ee_name, i));
         }
 
-        m_contactStates.data.length(num);
+        m_contactStates.data.length(ee_num);
         if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) {
             m_contactStates.data[contact_states_index_map["rleg"]] = true;
             m_contactStates.data[contact_states_index_map["lleg"]] = true;
@@ -281,10 +287,10 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
             m_contactStates.data[contact_states_index_map["larm"]] = false;
         }
 
-        m_controlSwingSupportTime.data.length(num);
-        for (size_t i = 0; i < num; i++) m_controlSwingSupportTime.data[i] = 1.0;
-        m_toeheelRatio.data.length(num);
-        for (size_t i = 0; i < num; i++) m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
+        m_controlSwingSupportTime.data.length(ee_num);
+        for (size_t i = 0; i < ee_num; i++) m_controlSwingSupportTime.data[i] = 1.0;
+        m_toeheelRatio.data.length(ee_num);
+        for (size_t i = 0; i < ee_num; i++) m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
     }
 
     {
@@ -310,13 +316,14 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     leg_names_interpolator->setName(std::string(m_profile.instance_name)+" leg_names_interpolator");
     leg_names_interpolator_ratio = 1.0;
 
+    // TODO: 確認 size != 0とは．0のときのみ初期化であっている？
     if (default_zmp_offsets.size() == 0) {
         for (size_t i = 0; i < ikp.size(); i++) default_zmp_offsets.push_back(hrp::Vector3::Zero());
     }
 
     {
         // GaitGenerator requires abc_leg_offset and abc_stride_parameter in robot conf file
-        coil::vstring leg_offset_str = coil::split(prop["abc_leg_offset"], ",");
+        const coil::vstring leg_offset_str = coil::split(prop["abc_leg_offset"], ",");
         if (leg_offset_str.size() > 0) {
             // setting leg_pos from conf file
             hrp::Vector3 leg_offset;
@@ -365,61 +372,67 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     // load virtual force sensors
     readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
     // ref force port
-    unsigned int npforce = m_robot->numSensors(hrp::Sensor::FORCE);
-    unsigned int nvforce = m_vfs.size();
-    unsigned int nforce  = npforce + nvforce;
+    const unsigned int num_pfsensors = m_robot->numSensors(hrp::Sensor::FORCE);
+    const unsigned int num_vfsensors = m_vfs.size();
+    const unsigned int num_fsensors  = num_pfsensors + num_vfsensors;
     // check number of force sensors
-    if (nforce < m_contactStates.data.length()) {
+    if (num_fsensors < m_contactStates.data.length()) {
         std::cerr << "[" << m_profile.instance_name
                   << "] WARNING! This robot model has less force sensors("
-                  << nforce
+                  << num_fsensors
                   << ") than end-effector settings("
                   << m_contactStates.data.length()
                   << ") !"
                   << std::endl;
     }
 
-    m_ref_force.resize(nforce);
-    m_ref_forceIn.resize(nforce);
-    m_force.resize(nforce);
-    m_ref_forceOut.resize(nforce);
-    m_limbCOPOffset.resize(nforce);
-    m_limbCOPOffsetOut.resize(nforce);
-    for (unsigned int i = 0; i < npforce; i++) {
+    m_ref_force.resize(num_fsensors);
+    m_ref_forceIn.resize(num_fsensors);
+    m_force.resize(num_fsensors);
+    m_ref_forceOut.resize(num_fsensors);
+    m_limbCOPOffset.resize(num_fsensors);
+    m_limbCOPOffsetOut.resize(num_fsensors);
+
+    for (unsigned int i = 0; i < num_pfsensors; i++) {
         sensor_names.push_back(m_robot->sensor(hrp::Sensor::FORCE, i)->name);
     }
-    for (unsigned int i = 0; i < nvforce; i++) {
-        for ( std::map<std::string, hrp::VirtualForceSensorParam>::iterator it = m_vfs.begin(); it != m_vfs.end(); it++ ) {
-            if (it->second.id == (int)i) sensor_names.push_back(it->first);
+    for (unsigned int i = 0; i < num_vfsensors; i++) {
+        for (std::map<std::string, hrp::VirtualForceSensorParam>::iterator it = m_vfs.begin(); it != m_vfs.end(); ++it) {
+            if (it->second.id == static_cast<int>(i)) sensor_names.push_back(it->first);
         }
     }
+
     // set ref force port
-    std::cerr << "[" << m_profile.instance_name << "] force sensor ports (" << nforce << ")" << std::endl;
-    for (unsigned int i = 0; i < nforce; i++) {
-        m_ref_forceIn[i] = new InPort<TimedDoubleSeq>(std::string("ref_"+sensor_names[i]).c_str(), m_ref_force[i]);
+    std::cerr << "[" << m_profile.instance_name << "] force sensor ports (" << num_fsensors << ")" << std::endl;
+    for (unsigned int i = 0; i < num_fsensors; i++) {
+        const std::string port_name("ref_" + sensor_names[i]);
+        m_ref_forceIn[i] = new InPort<TimedDoubleSeq>(port_name.c_str(), m_ref_force[i]);
         m_ref_force[i].data.length(6);
-        registerInPort(std::string("ref_"+sensor_names[i]).c_str(), *m_ref_forceIn[i]);
-        std::cerr << "[" << m_profile.instance_name << "]   name = " << std::string("ref_"+sensor_names[i]) << std::endl;
-        ref_forces.push_back(hrp::Vector3(0, 0, 0));
-        ref_moments.push_back(hrp::Vector3(0, 0, 0));
+        registerInPort(port_name.c_str(), *m_ref_forceIn[i]);
+        std::cerr << "[" << m_profile.instance_name << "]   name = " << port_name << std::endl;
+        ref_forces.push_back(hrp::Vector3::Zero());
+        ref_moments.push_back(hrp::Vector3::Zero());
     }
+
     // set force port
-    for (unsigned int i = 0; i < nforce; i++) {
-        m_ref_forceOut[i] = new OutPort<TimedDoubleSeq>(std::string(sensor_names[i]).c_str(), m_force[i]);
+    for (unsigned int i = 0; i < num_fsensors; i++) {
+        const std::string port_name(sensor_names[i]);
+        m_ref_forceOut[i] = new OutPort<TimedDoubleSeq>(port_name.c_str(), m_force[i]);
         m_force[i].data.length(6);
         m_force[i].data[0] = m_force[i].data[1] = m_force[i].data[2] = 0.0;
         m_force[i].data[3] = m_force[i].data[4] = m_force[i].data[5] = 0.0;
-        registerOutPort(std::string(sensor_names[i]).c_str(), *m_ref_forceOut[i]);
-        std::cerr << "[" << m_profile.instance_name << "]   name = " << std::string(sensor_names[i]) << std::endl;
+        registerOutPort(port_name.c_str(), *m_ref_forceOut[i]);
+        std::cerr << "[" << m_profile.instance_name << "]   name = " << port_name << std::endl;
     }
+
     // set limb cop offset port
-    std::cerr << "[" << m_profile.instance_name << "] limbCOPOffset ports (" << nforce << ")" << std::endl;
-    for (unsigned int i = 0; i < nforce; i++){
-        std::string nm("limbCOPOffset_"+sensor_names[i]);
-        m_limbCOPOffsetOut[i] = new OutPort<TimedPoint3D>(nm.c_str(), m_limbCOPOffset[i]);
-        registerOutPort(nm.c_str(), *m_limbCOPOffsetOut[i]);
+    std::cerr << "[" << m_profile.instance_name << "] limbCOPOffset ports (" << num_fsensors << ")" << std::endl;
+    for (unsigned int i = 0; i < num_fsensors; i++){
+        std::string port_name("limbCOPOffset_" + sensor_names[i]);
+        m_limbCOPOffsetOut[i] = new OutPort<TimedPoint3D>(port_name.c_str(), m_limbCOPOffset[i]);
+        registerOutPort(port_name.c_str(), *m_limbCOPOffsetOut[i]);
         m_limbCOPOffset[i].data.x = m_limbCOPOffset[i].data.y = m_limbCOPOffset[i].data.z = 0.0;
-        std::cerr << "[" << m_profile.instance_name << "]   name = " << nm << std::endl;
+        std::cerr << "[" << m_profile.instance_name << "]   name = " << port_name << std::endl;
     }
 
     if (ikp.find("rleg") != ikp.end() && ikp.find("lleg") != ikp.end()) is_legged_robot = true;

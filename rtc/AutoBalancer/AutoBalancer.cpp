@@ -7,18 +7,19 @@
  * $Id$
  */
 
-#include <hrpModel/Link.h>
-#include <hrpModel/Sensor.h>
-#include "AutoBalancer.h"
-#include <hrpModel/JointPath.h>
-#include <hrpUtil/MatrixSolvers.h>
+#include <boost/make_shared.hpp> // TODO: use std::make_shared for future
 #include "hrpsys/util/Hrpsys.h"
+#include <hrpModel/Sensor.h>
+#include <hrpUtil/MatrixSolvers.h>
+#include "AutoBalancer.h"
+#include "Utility.h"
 
+// TODO: use inline function
 #ifndef DEBUGP
 #define DEBUGP ((m_debugLevel == 1 && loop % 200 == 0) || m_debugLevel > 1)
 #endif
 
-typedef coil::Guard<coil::Mutex> Guard;
+using Guard = std::lock_guard<std::mutex>;
 using namespace rats;
 
 // Module specification
@@ -52,24 +53,11 @@ static std::ostream& operator<<(std::ostream& os, const struct RTC::Time &tm)
     return os;
 }
 
-static inline double calcInteriorPoint(const double start, const double end, const double ratio)
-{
-    return (1 - ratio) * start + ratio * end;
-}
-
-template<typename T>
-static inline T calcInteriorPoint(const T& start, const T& end, const double ratio)
-{
-    return (1 - ratio) * start + ratio * end;
-}
-
 AutoBalancer::AutoBalancer(RTC::Manager* manager)
     : RTC::DataFlowComponentBase(manager),
       // <rtc-template block="initializer">
-      // // Stabilizer
-      // m_qCurrentIn("qCurrent", m_qCurrent),
-      // m_rpyIn("rpy", m_rpy), // from KF
-      // // Stabilizer
+      m_qCurrentIn("qCurrent", m_qCurrent),
+      m_rpyIn("rpy", m_rpy), // from KF
       m_qRefIn("qRef", m_qRef),
       m_basePosIn("basePosIn", m_basePos),
       m_baseRpyIn("baseRpyIn", m_baseRpy),
@@ -81,9 +69,31 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_refFootOriginExtMomentIsHoldValueIn("refFootOriginExtMomentIsHoldValue", m_refFootOriginExtMomentIsHoldValue),
       m_actContactStatesIn("actContactStates", m_actContactStates),
 
-      // // Stabi
+      // Stabi
       // m_tauOut("tau", m_tau),
-      // // Stabi
+      // m_zmpOut("zmp", m_zmp), // for stabi (act ZMP?) TODO: 要確認
+      // m_refCPOut("refCapturePoint", m_refCP),
+      // m_actCPOut("actCapturePoint", m_actCP),
+      // m_diffCPOut("diffCapturePoint", m_diffCP),
+      // m_diffFootOriginExtMomentOut("diffFootOriginExtMoment", m_diffFootOriginExtMoment),
+      // m_actContactStatesOut("actContactStates", m_actContactStates),
+      // m_COPInfoOut("COPInfo", m_COPInfo),
+      // m_emergencySignalOut("emergencySignal", m_emergencySignal), // いらない？
+      // Debug
+      // m_originRefZmpOut("originRefZmp", m_originRefZmp),
+      // m_originRefCogOut("originRefCog", m_originRefCog),
+      // m_originRefCogVelOut("originRefCogVel", m_originRefCogVel),
+      // m_originNewZmpOut("originNewZmp", m_originNewZmp),
+      // m_originActZmpOut("originActZmp", m_originActZmp),
+      // m_originActCogOut("originActCog", m_originActCog),
+      // m_originActCogVelOut("originActCogVel", m_originActCogVel),
+      // m_actBaseRpyOut("actBaseRpy", m_actBaseRpy),
+      // m_currentBasePosOut("currentBasePos", m_currentBasePos),
+      // m_currentBaseRpyOut("currentBaseRpy", m_currentBaseRpy),
+      // m_allRefWrenchOut("allRefWrench", m_allRefWrench),
+      // m_allEECompOut("allEEComp", m_allEEComp),
+      // m_debugDataOut("debugData", m_debugData),
+      // Stabi
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
       m_basePosOut("basePosOut", m_basePos),
@@ -100,7 +110,6 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
 
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
-      m_robot(hrp::BodyPtr()),
       loop(0),
       control_mode(MODE_IDLE),
       is_legged_robot(false),
@@ -135,6 +144,8 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     // Registration: InPort/OutPort/Service
     // <rtc-template block="registration">
     // Set InPort buffers
+    addInPort("qCurrent", m_qCurrentIn);
+    addInPort("rpy", m_rpyIn);
     addInPort("qRef", m_qRefIn);
     addInPort("basePosIn", m_basePosIn);
     addInPort("baseRpyIn", m_baseRpyIn);
@@ -165,7 +176,6 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
 
     // Set service consumers to Ports
-
     // Set CORBA Service Ports
     addPort(m_AutoBalancerServicePort);
 
@@ -179,7 +189,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     coil::stringTo(m_dt, prop["dt"].c_str());
 
     // TODO: 関数化
-    m_robot = hrp::BodyPtr(new hrp::Body()); // TODO: make_shared
+    m_robot = boost::make_shared<hrp::Body>();
     RTC::Manager& rtcManager = RTC::Manager::instance();
     std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
     int comPos = nameServer.find(",");
@@ -196,25 +206,30 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     }
     // TODO end
 
-    // allocate memory for outPorts
+    // allocate memory
+    m_qCurrent.data.length(m_robot->numJoints());
     m_qRef.data.length(m_robot->numJoints());
     m_baseTform.data.length(12);
 
     // Generate FIK
-    fik = fikPtr(new SimpleFullbodyInverseKinematicsSolver(m_robot, std::string(m_profile.instance_name), m_dt));
+    fik = std::make_shared<SimpleFullbodyInverseKinematicsSolver>(m_robot, std::string(m_profile.instance_name), m_dt);
+
+    // Generate ST
+    st = std::make_shared<Stabilizer>(m_robot, std::string(m_profile.instance_name), m_dt);
 
     // setting from conf file
     // rleg,TARGET_LINK,BASE_LINK
     const coil::vstring end_effectors_str = coil::split(prop["end_effectors"], ",");
     const size_t prop_num = 10;
+    const unsigned int num_pfsensors = m_robot->numSensors(hrp::Sensor::FORCE);
+
     if (end_effectors_str.size() > 0) {
         const size_t ee_num = end_effectors_str.size() / prop_num;
+
         for (size_t i = 0; i < ee_num; i++) {
-            std::string ee_name, ee_target, ee_base;
-            // TODO: 手動でprop_numに足していきたくない idx++とかを使いたい
-            coil::stringTo(ee_name, end_effectors_str[i*prop_num].c_str());
-            coil::stringTo(ee_target, end_effectors_str[i*prop_num+1].c_str());
-            coil::stringTo(ee_base, end_effectors_str[i*prop_num+2].c_str());
+            const std::string ee_name(end_effectors_str[i*prop_num]);
+            const std::string ee_target(end_effectors_str[i*prop_num + 1]);
+            const std::string ee_base(end_effectors_str[i*prop_num + 2]);
 
             ABCIKparam tp; // TODO: rename
             for (size_t j = 0; j < 3; j++) {
@@ -264,6 +279,25 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
             tp.target_link = m_robot->link(ee_target);
             ikp.insert(std::pair<std::string, ABCIKparam>(ee_name , tp));
             ee_vec.push_back(ee_name);
+
+            // For Stabilizer IK TODO: IKを統合して消す
+            {
+                bool is_ee_exists = false;
+                std::string ikp_sensor_name = "";
+                for (size_t j = 0; j < num_pfsensors; ++j) {
+                    hrp::Sensor* fsensor = m_robot->sensor(hrp::Sensor::FORCE, j);
+                    hrp::Link* alink = m_robot->link(ee_target);
+                    while (alink != NULL && alink->name != ee_base && !is_ee_exists) {
+                        if (alink->name == fsensor->link->name) {
+                            is_ee_exists = true;
+                            ikp_sensor_name = fsensor->name;
+                        }
+                        alink = alink->parent;
+                    }
+                }
+                st->addSTIKParam(ee_name, ee_target, ikp_sensor_name);
+            }
+
             std::cerr << "[" << m_profile.instance_name
                       << "] End Effector [" << ee_name << "]" << std::endl;
             std::cerr << "[" << m_profile.instance_name
@@ -291,6 +325,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         for (size_t i = 0; i < ee_num; i++) m_controlSwingSupportTime.data[i] = 1.0;
         m_toeheelRatio.data.length(ee_num);
         for (size_t i = 0; i < ee_num; i++) m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
+
+        // TODO: 場所や初期化の見直し
+        st->initStabilizer(prop, ee_num);
     }
 
     {
@@ -372,7 +409,6 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     // load virtual force sensors
     readVirtualForceSensorParamFromProperties(m_vfs, m_robot, prop["virtual_force_sensor"], std::string(m_profile.instance_name));
     // ref force port
-    const unsigned int num_pfsensors = m_robot->numSensors(hrp::Sensor::FORCE);
     const unsigned int num_vfsensors = m_vfs.size();
     const unsigned int num_fsensors  = num_pfsensors + num_vfsensors;
     // check number of force sensors
@@ -388,6 +424,8 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
     m_ref_force.resize(num_fsensors);
     m_ref_forceIn.resize(num_fsensors);
+    m_wrenches.resize(num_fsensors);
+    m_wrenchesIn.resize(num_fsensors);
     m_force.resize(num_fsensors);
     m_ref_forceOut.resize(num_fsensors);
     m_limbCOPOffset.resize(num_fsensors);
@@ -402,7 +440,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         }
     }
 
-    // set ref force port
+    // set force port
     std::cerr << "[" << m_profile.instance_name << "] force sensor ports (" << num_fsensors << ")" << std::endl;
     for (unsigned int i = 0; i < num_fsensors; i++) {
         const std::string port_name("ref_" + sensor_names[i]);
@@ -412,6 +450,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         std::cerr << "[" << m_profile.instance_name << "]   name = " << port_name << std::endl;
         ref_forces.push_back(hrp::Vector3::Zero());
         ref_moments.push_back(hrp::Vector3::Zero());
+        m_wrenchesIn[i] = new InPort<TimedDoubleSeq>(sensor_names[i].c_str(), m_wrenches[i]);
+        m_wrenches[i].data.length(6);
+        registerInPort(sensor_names[i].c_str(), *m_wrenchesIn[i]);
     }
 
     // set force port
@@ -479,7 +520,6 @@ RTC::ReturnCode_t AutoBalancer::onFinalize()
 RTC::ReturnCode_t AutoBalancer::onActivated(RTC::UniqueId ec_id)
 {
     std::cerr << "[" << m_profile.instance_name<< "] onActivated(" << ec_id << ")" << std::endl;
-
     return RTC::RTC_OK;
 }
 
@@ -501,28 +541,29 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     readInportData();
     loop++;
 
+    if (!is_legged_robot) {
+        if (m_qRef.data.length() != 0) m_qOut.write();
+        return RTC::RTC_OK;
+    }
+
     // Calculation
     Guard guard(m_mutex); // TODO: スコープ確認
 
-    if ( is_legged_robot ) {
-        hrp::Vector3 ref_basePos;
-        hrp::Matrix33 ref_baseRot;
-        hrp::Vector3 rel_ref_zmp; // ref zmp in base frame
+    // For parameters
+    fik->storeCurrentParameters();
+    getTargetParameters();
 
-        // For parameters
-        fik->storeCurrentParameters();
-        getTargetParameters();
+    // Get transition ratio
+    const bool is_transition_interpolator_empty = transition_interpolator->isEmpty();
+    if (!is_transition_interpolator_empty) {
+        transition_interpolator->get(&transition_interpolator_ratio, true);
+    } else {
+        transition_interpolator_ratio = (control_mode == MODE_IDLE) ? 0.0 : 1.0;
+    }
 
-        // Get transition ratio
-        const bool is_transition_interpolator_empty = transition_interpolator->isEmpty();
-        if (!is_transition_interpolator_empty) {
-            transition_interpolator->get(&transition_interpolator_ratio, true);
-        } else {
-            transition_interpolator_ratio = (control_mode == MODE_IDLE) ? 0.0 : 1.0;
-        }
-
-        if (control_mode != MODE_IDLE ) {
-            solveFullbodyIK();
+    hrp::Vector3 rel_ref_zmp; // ref zmp in base frame
+    if (control_mode != MODE_IDLE ) {
+        solveFullbodyIK();
 //        /////// Inverse Dynamics /////////
 //        if(!idsb.is_initialized){
 //          idsb.setInitState(m_robot, m_dt);
@@ -539,145 +580,183 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 //        }
 //        updateInvDynStateBuffer(idsb);
 
-            rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
-        } else {
-            rel_ref_zmp = input_zmp;
-            fik->d_root_height = 0.0;
+        rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
+    } else {
+        rel_ref_zmp = input_zmp;
+        fik->d_root_height = 0.0;
+    }
+
+    hrp::Vector3  ref_basePos = m_robot->rootLink()->p;
+    hrp::Matrix33 ref_baseRot = m_robot->rootLink()->R;
+    // Transition
+    if (!is_transition_interpolator_empty) {
+        // transition_interpolator_ratio 0=>1 : IDLE => ABC
+        // transition_interpolator_ratio 1=>0 : ABC => IDLE
+        ref_basePos = calcInteriorPoint(input_basePos, m_robot->rootLink()->p, transition_interpolator_ratio);
+        rel_ref_zmp = calcInteriorPoint(input_zmp, rel_ref_zmp, transition_interpolator_ratio);
+        rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
+
+        // TODO: use function
+        for (unsigned int i = 0; i < m_robot->numJoints(); i++) {
+            m_robot->joint(i)->q = calcInteriorPoint(m_qRef.data[i], m_robot->joint(i)->q, transition_interpolator_ratio);
         }
 
-        // Transition
-        if (!is_transition_interpolator_empty) {
-            // transition_interpolator_ratio 0=>1 : IDLE => ABC
-            // transition_interpolator_ratio 1=>0 : ABC => IDLE
-            ref_basePos = calcInteriorPoint(input_basePos, m_robot->rootLink()->p, transition_interpolator_ratio);
-            rel_ref_zmp = calcInteriorPoint(input_zmp, rel_ref_zmp, transition_interpolator_ratio);
-            rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
-
-            for (unsigned int i = 0; i < m_robot->numJoints(); i++) {
-                m_robot->joint(i)->q = calcInteriorPoint(m_qRef.data[i], m_robot->joint(i)->q, transition_interpolator_ratio);
-            }
-
-            for (unsigned int i = 0; i < m_force.size(); i++) {
-                for (unsigned int j = 0; j < 6; j++) {
-                    m_force[i].data[j] = calcInteriorPoint(m_force[i].data[j], m_ref_force[i].data[j], transition_interpolator_ratio);
-                }
-            }
-
-            for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
-                // transition (TODO:set stopABCmode value instead of 0)
-                m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;// + (1-transition_interpolator_ratio) * 0;
-                m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;// + (1-transition_interpolator_ratio) * 0;
-                m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;// + (1-transition_interpolator_ratio) * 0;
-            }
-        } else {
-            ref_basePos = m_robot->rootLink()->p;
-            ref_baseRot = m_robot->rootLink()->R;
-        }
-
-        // mode change for sync
-        if (control_mode == MODE_SYNC_TO_ABC) {
-            control_mode = MODE_ABC;
-        } else if (control_mode == MODE_SYNC_TO_IDLE && transition_interpolator->isEmpty()) {
-            std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
-                      << "] Finished cleanup" << std::endl;
-            control_mode = MODE_IDLE;
-        }
-
-        // Write outport data for legged robot
-        {
-            m_basePos.tm = m_qRef.tm;
-            m_basePos.data.x = ref_basePos(0);
-            m_basePos.data.y = ref_basePos(1);
-            m_basePos.data.z = ref_basePos(2);
-            m_basePosOut.write();
-
-            const hrp::Vector3 baseRpy = hrp::rpyFromRot(ref_baseRot);
-            m_baseRpy.tm = m_qRef.tm;
-            m_baseRpy.data.r = baseRpy(0);
-            m_baseRpy.data.p = baseRpy(1);
-            m_baseRpy.data.y = baseRpy(2);
-            m_baseRpyOut.write();
-
-            double *tform_arr = m_baseTform.data.get_buffer();
-            m_baseTform.tm = m_qRef.tm;
-            tform_arr[0] = m_basePos.data.x;
-            tform_arr[1] = m_basePos.data.y;
-            tform_arr[2] = m_basePos.data.z;
-            hrp::setMatrix33ToRowMajorArray(ref_baseRot, tform_arr, 3);
-            m_baseTformOut.write();
-
-            m_basePose.tm = m_qRef.tm;
-            m_basePose.data.position.x = m_basePos.data.x;
-            m_basePose.data.position.y = m_basePos.data.y;
-            m_basePose.data.position.z = m_basePos.data.z;
-            m_basePose.data.orientation.r = m_baseRpy.data.r;
-            m_basePose.data.orientation.p = m_baseRpy.data.p;
-            m_basePose.data.orientation.y = m_baseRpy.data.y;
-            m_basePoseOut.write();
-
-            m_zmp.tm = m_qRef.tm;
-            m_zmp.data.x = rel_ref_zmp(0);
-            m_zmp.data.y = rel_ref_zmp(1);
-            m_zmp.data.z = rel_ref_zmp(2);
-            m_zmpOut.write();
-
-            m_cog.tm = m_qRef.tm;
-            m_cog.data.x = ref_cog(0);
-            m_cog.data.y = ref_cog(1);
-            m_cog.data.z = ref_cog(2);
-            m_cogOut.write();
-
-            m_sbpCogOffset.tm = m_qRef.tm;
-            m_sbpCogOffset.data.x = sbp_cog_offset(0);
-            m_sbpCogOffset.data.y = sbp_cog_offset(1);
-            m_sbpCogOffset.data.z = sbp_cog_offset(2);
-            m_sbpCogOffsetOut.write();
-
-            // reference acceleration
-            const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-            if (sen != NULL) {
-                const hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
-                const hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos) / m_dt;
-                // convert to imu sensor local acceleration
-                const hrp::Vector3 acc = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel) / m_dt;
-                prev_imu_sensor_pos = imu_sensor_pos;
-                prev_imu_sensor_vel = imu_sensor_vel;
-
-                m_accRef.data.ax = acc(0);
-                m_accRef.data.ay = acc(1);
-                m_accRef.data.az = acc(2);
-                m_accRefOut.write();
-            }
-
-            // control parameters
-            m_contactStates.tm = m_qRef.tm;
-            m_contactStatesOut.write();
-            m_controlSwingSupportTime.tm = m_qRef.tm;
-            m_controlSwingSupportTimeOut.write();
-
-            m_toeheelRatio.tm = m_qRef.tm;
-            m_toeheelRatioOut.write();
-
-            m_walkingStates.tm = m_qRef.tm;
-            m_walkingStates.data = gg_is_walking;
-            m_walkingStatesOut.write();
-
-            for (unsigned int i = 0; i < m_ref_forceOut.size(); i++){
-                m_force[i].tm = m_qRef.tm;
-                m_ref_forceOut[i]->write();
-            }
-
-            for (unsigned int i = 0; i < m_limbCOPOffsetOut.size(); i++){
-                m_limbCOPOffset[i].tm = m_qRef.tm;
-                m_limbCOPOffsetOut[i]->write();
+        for (unsigned int i = 0; i < m_force.size(); i++) {
+            for (unsigned int j = 0; j < 6; j++) {
+                m_force[i].data[j] = calcInteriorPoint(m_force[i].data[j], m_ref_force[i].data[j], transition_interpolator_ratio);
             }
         }
 
-        {
-            const unsigned int qRef_length = m_qRef.data.length();
-            for (unsigned int i = 0; i < qRef_length; i++) {
-                m_qRef.data[i] = m_robot->joint(i)->q;
-            }
+        for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
+            // transition (TODO:set stopABCmode value instead of 0)
+            m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;// + (1-transition_interpolator_ratio) * 0;
+            m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;// + (1-transition_interpolator_ratio) * 0;
+            m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;// + (1-transition_interpolator_ratio) * 0;
+        }
+    }
+
+    // mode change for sync
+    if (control_mode == MODE_SYNC_TO_ABC) {
+        control_mode = MODE_ABC;
+    } else if (control_mode == MODE_SYNC_TO_IDLE && transition_interpolator->isEmpty()) {
+        std::cerr << "[" << m_profile.instance_name << "] [" << m_qRef.tm
+                  << "] Finished cleanup" << std::endl;
+        control_mode = MODE_IDLE;
+    }
+
+    // Stabilizer
+    hrp::dvector abc_qref(m_robot->numJoints());
+    copyJointAnglesFromRobotModel(abc_qref, m_robot);
+    const hrp::Vector3 baseRpy = hrp::rpyFromRot(ref_baseRot);
+    // TODO: 関数化
+    std::vector<bool> ref_contact_states(m_contactStates.data.length());
+    for (size_t i = 0; i < m_contactStates.data.length(); ++i) {
+        ref_contact_states[i] = m_contactStates.data[i];
+    }
+    std::vector<double> toe_heel_ratio(m_toeheelRatio.data.length());
+    for (size_t i = 0; i < m_toeheelRatio.data.length(); ++i) {
+        toe_heel_ratio[i] = m_toeheelRatio.data[i];
+    }
+    std::vector<double> control_swing_support_time(m_controlSwingSupportTime.data.length());
+    for (size_t i = 0; i < m_controlSwingSupportTime.data.length(); ++i) {
+        control_swing_support_time[i] = m_controlSwingSupportTime.data[i];
+    }
+    std::vector<hrp::dvector6> ref_wrenches(m_ref_force.size());
+    for (size_t i = 0; i < m_ref_force.size(); ++i) {
+        for (size_t j = 0; j < 6; ++j) {
+            ref_wrenches[i][j] = m_ref_force[i].data[j];
+        }
+    }
+    hrp::dvector q_current(m_robot->numJoints());
+    for (size_t i = 0; i < m_robot->numJoints(); ++i) {
+        q_current[i] = m_qCurrent.data[i];
+    }
+    hrp::Vector3 rpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y);
+    std::vector<hrp::dvector6> wrenches(m_wrenches.size());
+    for (size_t i = 0; i < m_wrenches.size(); ++i) {
+        for (size_t j = 0; j < 6; ++j) {
+            wrenches[i][j] = m_wrenches[i].data[j];
+        }
+    }
+
+    st->execStabilizer(paramsToStabilizer{abc_qref, rel_ref_zmp, ref_basePos,
+                                          baseRpy, ref_contact_states, toe_heel_ratio,
+                                          control_swing_support_time, ref_wrenches},
+                       paramsFromSensors{q_current, rpy, wrenches});
+
+    // Write outport data for legged robot
+    {
+        m_basePos.tm = m_qRef.tm;
+        m_basePos.data.x = ref_basePos(0);
+        m_basePos.data.y = ref_basePos(1);
+        m_basePos.data.z = ref_basePos(2);
+        m_basePosOut.write();
+
+        m_baseRpy.tm = m_qRef.tm;
+        m_baseRpy.data.r = baseRpy(0);
+        m_baseRpy.data.p = baseRpy(1);
+        m_baseRpy.data.y = baseRpy(2);
+        m_baseRpyOut.write();
+
+        double *tform_arr = m_baseTform.data.get_buffer();
+        m_baseTform.tm = m_qRef.tm;
+        tform_arr[0] = m_basePos.data.x;
+        tform_arr[1] = m_basePos.data.y;
+        tform_arr[2] = m_basePos.data.z;
+        hrp::setMatrix33ToRowMajorArray(ref_baseRot, tform_arr, 3);
+        m_baseTformOut.write();
+
+        m_basePose.tm = m_qRef.tm;
+        m_basePose.data.position.x = m_basePos.data.x;
+        m_basePose.data.position.y = m_basePos.data.y;
+        m_basePose.data.position.z = m_basePos.data.z;
+        m_basePose.data.orientation.r = m_baseRpy.data.r;
+        m_basePose.data.orientation.p = m_baseRpy.data.p;
+        m_basePose.data.orientation.y = m_baseRpy.data.y;
+        m_basePoseOut.write();
+
+        m_zmp.tm = m_qRef.tm;
+        m_zmp.data.x = rel_ref_zmp(0);
+        m_zmp.data.y = rel_ref_zmp(1);
+        m_zmp.data.z = rel_ref_zmp(2);
+        m_zmpOut.write();
+
+        m_cog.tm = m_qRef.tm;
+        m_cog.data.x = ref_cog(0);
+        m_cog.data.y = ref_cog(1);
+        m_cog.data.z = ref_cog(2);
+        m_cogOut.write();
+
+        m_sbpCogOffset.tm = m_qRef.tm;
+        m_sbpCogOffset.data.x = sbp_cog_offset(0);
+        m_sbpCogOffset.data.y = sbp_cog_offset(1);
+        m_sbpCogOffset.data.z = sbp_cog_offset(2);
+        m_sbpCogOffsetOut.write();
+
+        // reference acceleration
+        const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+        if (sen != NULL) {
+            const hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
+            const hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos) / m_dt;
+            // convert to imu sensor local acceleration
+            const hrp::Vector3 acc = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel) / m_dt;
+            prev_imu_sensor_pos = imu_sensor_pos;
+            prev_imu_sensor_vel = imu_sensor_vel;
+
+            m_accRef.data.ax = acc(0);
+            m_accRef.data.ay = acc(1);
+            m_accRef.data.az = acc(2);
+            m_accRefOut.write();
+        }
+
+        // control parameters
+        m_contactStates.tm = m_qRef.tm;
+        m_contactStatesOut.write();
+        m_controlSwingSupportTime.tm = m_qRef.tm;
+        m_controlSwingSupportTimeOut.write();
+
+        m_toeheelRatio.tm = m_qRef.tm;
+        m_toeheelRatioOut.write();
+
+        m_walkingStates.tm = m_qRef.tm;
+        m_walkingStates.data = gg_is_walking;
+        m_walkingStatesOut.write();
+
+        for (unsigned int i = 0; i < m_ref_forceOut.size(); i++){
+            m_force[i].tm = m_qRef.tm;
+            m_ref_forceOut[i]->write();
+        }
+
+        for (unsigned int i = 0; i < m_limbCOPOffsetOut.size(); i++){
+            m_limbCOPOffset[i].tm = m_qRef.tm;
+            m_limbCOPOffsetOut[i]->write();
+        }
+    }
+
+    {
+        const unsigned int qRef_length = m_qRef.data.length();
+        for (unsigned int i = 0; i < qRef_length; i++) {
+            m_qRef.data[i] = m_robot->joint(i)->q;
         }
     }
 
@@ -688,6 +767,8 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 
 void AutoBalancer::readInportData()
 {
+    if (m_qCurrentIn.isNew()) m_qCurrentIn.read();
+    if (m_rpyIn.isNew()) m_rpyIn.read();
     if (m_qRefIn.isNew()) m_qRefIn.read();
     if (m_basePosIn.isNew()) {
         m_basePosIn.read();
@@ -705,8 +786,11 @@ void AutoBalancer::readInportData()
         input_zmp(1) = m_zmp.data.y;
         input_zmp(2) = m_zmp.data.z;
     }
-    for (unsigned int i = 0; i < m_ref_forceIn.size(); i++) {
+
+    const size_t num_fsensors = m_wrenchesIn.size();
+    for (size_t i = 0; i < num_fsensors; i++) {
         if (m_ref_forceIn[i]->isNew()) m_ref_forceIn[i]->read();
+        if (m_wrenchesIn[i]->isNew()) m_wrenchesIn[i]->read();
     }
     if (m_optionalDataIn.isNew()) m_optionalDataIn.read();
     if (m_emergencySignalIn.isNew()) {
@@ -736,14 +820,16 @@ void AutoBalancer::readInportData()
 void AutoBalancer::getTargetParameters()
 {
     // joint angles
-    for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ){
+    for (unsigned int i = 0; i < m_robot->numJoints(); i++) {
         m_robot->joint(i)->q = m_qRef.data[i];
     }
     fik->setReferenceJointAngles();
+
     // basepos, rot, zmp
     m_robot->rootLink()->p = input_basePos;
     m_robot->rootLink()->R = input_baseRot;
     m_robot->calcForwardKinematics();
+
     gg->proc_zmp_weight_map_interpolation();
     if (control_mode != MODE_IDLE) {
         interpolateLegNamesAndZMPOffsets();
@@ -756,6 +842,7 @@ void AutoBalancer::getTargetParameters()
         } else {
             tmp_fix_coords = fix_leg_coords;
         }
+
         if (!adjust_footstep_interpolator->isEmpty()) {
             calcFixCoordsForAdjustFootstep(tmp_fix_coords);
             fix_leg_coords = tmp_fix_coords;
@@ -772,11 +859,12 @@ void AutoBalancer::getTargetParameters()
         } else {
             getOutputParametersForABC();
         }
+
         //   Just for ik initial value
         if (control_mode == MODE_SYNC_TO_ABC) {
             fik->current_root_p = target_root_p;
             fik->current_root_R = target_root_R;
-            for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+            for (std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); ++it) {
                 if ( std::find(leg_names.begin(), leg_names.end(), it->first) != leg_names.end() ) {
                     it->second.target_p0 = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
                     it->second.target_r0 = it->second.target_link->R * it->second.localR;
@@ -785,23 +873,23 @@ void AutoBalancer::getTargetParameters()
         }
 
         // Calculate other parameters
-        updateTargetCoordsForHandFixMode (tmp_fix_coords);
-        rotateRefForcesForFixCoords (tmp_fix_coords);
+        updateTargetCoordsForHandFixMode(tmp_fix_coords);
+        rotateRefForcesForFixCoords(tmp_fix_coords);
         // TODO : see explanation in this function
-        calculateOutputRefForces ();
+        calculateOutputRefForces();
         // TODO : see explanation in this function
         updateWalkingVelocityFromHandError(tmp_fix_coords);
         calcReferenceJointAnglesForIK();
 
         // Calculate ZMP, COG, and sbp targets
-        hrp::Vector3 tmp_ref_cog(m_robot->calcCM());
-        hrp::Vector3 tmp_foot_mid_pos = calcFootMidPosUsingZMPWeightMap ();
+        double ref_cog_z = m_robot->calcCM()[2];
+        hrp::Vector3 tmp_foot_mid_pos = calcFootMidPosUsingZMPWeightMap();
         if (gg_is_walking) {
             ref_cog = gg->get_cog();
         } else {
             ref_cog = tmp_foot_mid_pos;
         }
-        ref_cog(2) = tmp_ref_cog(2);
+        ref_cog(2) = ref_cog_z;
         if (gg_is_walking) {
             ref_zmp = gg->get_refzmp();
         } else {
@@ -812,9 +900,9 @@ void AutoBalancer::getTargetParameters()
     } else { // MODE_IDLE
         // Update fix_leg_coords based on input basePos and rot if MODE_IDLE
         std::vector<coordinates> tmp_end_coords_list;
-        for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-            if ( std::find(leg_names.begin(), leg_names.end(), it->first) != leg_names.end() ) {
-                tmp_end_coords_list.push_back(coordinates(it->second.target_link->p+it->second.target_link->R*it->second.localPos, it->second.target_link->R*it->second.localR));
+        for (std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); ++it) {
+            if (std::find(leg_names.begin(), leg_names.end(), it->first) != leg_names.end()) {
+                tmp_end_coords_list.push_back(coordinates(it->second.target_link->p + it->second.target_link->R * it->second.localPos, it->second.target_link->R * it->second.localR));
             }
         }
         multi_mid_coords(fix_leg_coords, tmp_end_coords_list);
@@ -826,8 +914,9 @@ void AutoBalancer::getTargetParameters()
             }
         }
     }
+
     // Just for stop walking
-    if (gg_is_walking && !gg_solved) stopWalking ();
+    if (gg_is_walking && !gg_solved) stopWalking();
 }
 
 void AutoBalancer::getOutputParametersForWalking ()
@@ -1311,37 +1400,60 @@ bool AutoBalancer::stopAutoBalancer ()
   }
 }
 
+void AutoBalancer::getStabilizerParam(OpenHRP::AutoBalancerService::StabilizerParam& i_param)
+{
+    st->getStabilizerParam(i_param);
+}
+
+void AutoBalancer::setStabilizerParam(const OpenHRP::AutoBalancerService::StabilizerParam& i_param)
+{
+    st->setStabilizerParam(i_param);
+}
+
+void AutoBalancer::startStabilizer(void)
+{
+    st->startStabilizer();
+}
+
+void AutoBalancer::stopStabilizer(void)
+{
+    st->stopStabilizer();
+}
+
 void AutoBalancer::waitABCTransition()
 {
   while (!transition_interpolator->isEmpty()) usleep(1000);
   usleep(1000);
 }
+
 bool AutoBalancer::goPos(const double& x, const double& y, const double& th)
 {
-    //  if ( !gg_is_walking && !is_stop_mode) {
-  if ( !is_stop_mode) {
+    if (is_stop_mode) {
+        std::cerr << "[" << m_profile.instance_name << "] Cannot goPos while stopping mode." << std::endl;
+        return false;
+    }
+
     gg->set_all_limbs(leg_names);
     coordinates start_ref_coords;
     std::vector<coordinates> initial_support_legs_coords;
     std::vector<leg_type> initial_support_legs;
-    bool is_valid_gait_type = calc_inital_support_legs(y, initial_support_legs_coords, initial_support_legs, start_ref_coords);
-    if (is_valid_gait_type == false) return false;
+    const bool is_valid_gait_type = calc_inital_support_legs(y, initial_support_legs_coords, initial_support_legs, start_ref_coords);
+    if (!is_valid_gait_type) return false;
+
+    // If gg_is_walking, initialize. Otherwise, not initialize and overwrite footsteps.
     bool ret = gg->go_pos_param_2_footstep_nodes_list(x, y, th,
                                                       initial_support_legs_coords, // Dummy if gg_is_walking
                                                       start_ref_coords,            // Dummy if gg_is_walking
                                                       initial_support_legs,        // Dummy if gg_is_walking
-                                                      (!gg_is_walking)); // If gg_is_walking, initialize. Otherwise, not initialize and overwrite footsteps.
+                                                      !gg_is_walking);
     if (!ret) {
         std::cerr << "[" << m_profile.instance_name << "] Cannot goPos because of invalid timing." << std::endl;
     }
-    if ( !gg_is_walking ) { // Initializing
+    if (!gg_is_walking) { // Initializing
         ret = startWalking();
     }
+
     return ret;
-  } else {
-    std::cerr << "[" << m_profile.instance_name << "] Cannot goPos while stopping mode." << std::endl;
-    return false;
-  }
 }
 
 bool AutoBalancer::goVelocity(const double& vx, const double& vy, const double& vth)
@@ -2373,13 +2485,11 @@ std::string AutoBalancer::getUseForceModeString ()
 //
 extern "C"
 {
-
-    void AutoBalancerInit(RTC::Manager* manager)
-    {
-        RTC::Properties profile(autobalancer_spec);
-        manager->registerFactory(profile,
-                                 RTC::Create<AutoBalancer>,
-                                 RTC::Delete<AutoBalancer>);
-    }
-
+void AutoBalancerInit(RTC::Manager* manager)
+{
+    RTC::Properties profile(autobalancer_spec);
+    manager->registerFactory(profile,
+                             RTC::Create<AutoBalancer>,
+                             RTC::Delete<AutoBalancer>);
+}
 };

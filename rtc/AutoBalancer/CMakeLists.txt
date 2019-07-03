@@ -1,8 +1,24 @@
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
+  message(WARNING "[rtc/AutoBalanceStabilizer] Your gcc version is less than 5.1. Skip Compiling AutoBalanceStabilizer")
+  return()
+endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+
 set(comp_sources AutoBalancer.cpp AutoBalancerService_impl.cpp ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../SequencePlayer/interpolator.cpp PreviewController.cpp GaitGenerator.cpp SimpleFullbodyInverseKinematicsSolver.h ../TorqueFilter/IIRFilter.cpp)
 set(libs hrpModel-3.1 hrpCollision-3.1 hrpUtil-3.1 hrpsysBaseStub)
+
+include_directories(${PROJECT_SOURCE_DIR}/rtc/SequencePlayer)
+
 add_library(AutoBalancer SHARED ${comp_sources})
-target_link_libraries(AutoBalancer ${libs})
+target_link_libraries(AutoBalancer PRIVATE Stabilizer ${libs})
 set_target_properties(AutoBalancer PROPERTIES PREFIX "")
+
+add_library(Stabilizer SHARED Integrator.cpp TwoDofController.cpp Stabilizer.cpp ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../TorqueFilter/IIRFilter.h)
+target_link_libraries(Stabilizer PRIVATE ${libs})
+
+add_executable(AutoBalancerComp AutoBalancerComp.cpp ${comp_sources})
+target_link_libraries(AutoBalancerComp PRIVATE AutoBalancer Stabilizer ${libs})
 
 add_executable(testPreviewController testPreviewController.cpp ../ImpedanceController/RatsMatrix.cpp PreviewController.cpp)
 target_link_libraries(testPreviewController ${libs})
@@ -11,12 +27,7 @@ add_executable(testGaitGenerator testGaitGenerator.cpp ../ImpedanceController/Ra
 target_link_libraries(testGaitGenerator ${libs})
 set_target_properties(testGaitGenerator PROPERTIES COMPILE_DEFINITIONS "FOR_TESTGAITGENERATOR=1")
 
-add_executable(AutoBalancerComp AutoBalancerComp.cpp ${comp_sources})
-target_link_libraries(AutoBalancerComp ${libs})
-
-include_directories(${PROJECT_SOURCE_DIR}/rtc/SequencePlayer)
-
-set(target AutoBalancer AutoBalancerComp testPreviewController testGaitGenerator)
+set(target AutoBalancer AutoBalancerComp Stabilizer testPreviewController testGaitGenerator)
 
 add_test(testPreviewControllerNoGP testPreviewController --use-gnuplot false)
 add_test(testGaitGeneratorTest0 testGaitGenerator --test0 --use-gnuplot false)
@@ -43,4 +54,3 @@ install(TARGETS ${target}
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
 )
-

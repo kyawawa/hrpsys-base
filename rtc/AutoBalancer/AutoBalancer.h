@@ -10,6 +10,8 @@
 #ifndef AUTOBALANCER_H
 #define AUTOBALANCER_H
 
+#include <mutex>
+
 #include <rtm/idl/BasicDataType.hh>
 #include <rtm/idl/ExtendedDataTypes.hh>
 #include <rtm/CorbaNaming.h>
@@ -20,17 +22,21 @@
 #include <rtm/DataOutPort.h>
 #include <rtm/idl/BasicDataTypeSkel.h>
 #include <rtm/idl/ExtendedDataTypesSkel.h>
+
 #include <hrpModel/Body.h>
 #include <hrpModel/ModelLoaderUtil.h>
+
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
+#include "interpolator.h"
+#include "../TorqueFilter/IIRFilter.h"
 #include "GaitGenerator.h"
+#include "Stabilizer.h"
 // Service implementation headers
 // <rtc-template block="service_impl_h">
 #include "AutoBalancerService_impl.h"
-#include "interpolator.h"
-#include "../TorqueFilter/IIRFilter.h"
-#include "SimpleFullbodyInverseKinematicsSolver.h"
+#include "SimpleFullbodyInverseKinematicsSolver.h" // TODO: This should be included after AutoBalancerService_impl.h
+
 
 // </rtc-template>
 
@@ -40,6 +46,33 @@
 // </rtc-template>
 
 using namespace RTC;
+using paramsToStabilizer = paramsFromAutoBalancer;
+
+// // TODO: utility化?
+// RTC::ReturnCode_t loadRobotModel(const hrp::BodyPtr& m_robot, const RTC::Properties& _prop, const CORBA::String_member& instance_name)
+// {
+//     m_robot = hrp::BodyPtr(new hrp::Body()); // TODO: make_shared
+//     RTC::Manager& rtcManager = RpTC::Manager::instance();
+//     std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
+//     int comPos = nameServer.find(",");
+//     if (comPos < 0) {
+//         comPos = nameServer.length();
+//     }
+//     nameServer = nameServer.substr(0, comPos);
+//     RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
+//     if (!loadBodyFromModelLoader(m_robot, _prop["model"].c_str(),
+//                                  CosNaming::NamingContext::_duplicate(naming.getRootContext())
+//             )) {
+//         std::cerr << "[" << instance_name
+//                   << "] failed to load model["
+//                   << _prop["model"]
+//                   << "]"
+//                   << std::endl;
+//         return RTC::RTC_ERROR;
+//     }
+
+//     return RTC::RTC_OK;
+// }
 
 class AutoBalancer
   : public RTC::DataFlowComponentBase
@@ -118,6 +151,12 @@ class AutoBalancer
     bool releaseEmergencyStop();
     void distributeReferenceZMPToWrenches (const hrp::Vector3& _ref_zmp);
 
+    // Stabilizer
+    void getStabilizerParam(OpenHRP::AutoBalancerService::StabilizerParam& i_param);
+    void setStabilizerParam(const OpenHRP::AutoBalancerService::StabilizerParam& i_param);
+    void startStabilizer(void);
+    void stopStabilizer(void);
+
   protected:
     // Configuration variable declaration
     // <rtc-template block="config_declare">
@@ -126,8 +165,12 @@ class AutoBalancer
 
     // DataInPort declaration
     // <rtc-template block="inport_declare">
+    TimedDoubleSeq m_qCurrent;
+    InPort<TimedDoubleSeq> m_qCurrentIn;
     TimedDoubleSeq m_qRef;
     InPort<TimedDoubleSeq> m_qRefIn;
+    TimedOrientation3D m_rpy;
+    InPort<TimedOrientation3D> m_rpyIn;
     TimedPoint3D m_basePos;
     InPort<TimedPoint3D> m_basePosIn;
     TimedOrientation3D m_baseRpy;
@@ -148,6 +191,8 @@ class AutoBalancer
     InPort<TimedPoint3D> m_refFootOriginExtMomentIn;
     TimedBoolean m_refFootOriginExtMomentIsHoldValue;
     InPort<TimedBoolean> m_refFootOriginExtMomentIsHoldValueIn;
+    std::vector<TimedDoubleSeq> m_wrenches;
+    std::vector<InPort<TimedDoubleSeq> *> m_wrenchesIn;
     // for debug
     TimedPoint3D m_cog;
 
@@ -156,7 +201,9 @@ class AutoBalancer
     // DataOutPort declaration
     // <rtc-template block="outport_declare">
     OutPort<TimedDoubleSeq> m_qOut;
-    RTC::OutPort<RTC::TimedPoint3D> m_zmpOut;
+    // TimedDoubleSeq m_tau;
+    // OutPort<TimedDoubleSeq> m_tauOut;
+    OutPort<TimedPoint3D> m_zmpOut;
     OutPort<TimedPoint3D> m_basePosOut;
     OutPort<TimedOrientation3D> m_baseRpyOut;
     TimedDoubleSeq m_baseTform;
@@ -211,6 +258,7 @@ class AutoBalancer
     void readInportData();
     void writeOutportDataForLeggedRobot();
     void getTargetParameters();
+    void getActualParameters();
     void solveFullbodyIK ();
     void startABCparam(const ::OpenHRP::AutoBalancerService::StrSequence& limbs);
     void stopABCparam();
@@ -246,12 +294,13 @@ class AutoBalancer
     std::string getUseForceModeString ();
 
     // for gg
-    typedef boost::shared_ptr<rats::gait_generator> ggPtr;
+    using ggPtr = std::shared_ptr<rats::gait_generator>;
     ggPtr gg;
+    std::shared_ptr<Stabilizer> st;
     bool gg_is_walking, gg_solved;
     // for abc
-    typedef boost::shared_ptr<SimpleFullbodyInverseKinematicsSolver> fikPtr;
-    fikPtr fik;
+    using fikPtr = std::shared_ptr<SimpleFullbodyInverseKinematicsSolver>;
+    std::shared_ptr<SimpleFullbodyInverseKinematicsSolver> fik;
     hrp::Vector3 ref_cog, ref_zmp, prev_ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
     enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;
     enum {MODE_IDLE, MODE_ABC, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_ABC} control_mode;
@@ -265,7 +314,7 @@ class AutoBalancer
     std::vector<hrp::Vector3> default_zmp_offsets;
     double m_dt;
     hrp::BodyPtr m_robot;
-    coil::Mutex m_mutex;
+    std::mutex m_mutex;
     double d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];
     bool use_limb_stretch_avoidance;
 

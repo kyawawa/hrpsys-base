@@ -386,7 +386,10 @@ namespace rats
           if (!zmp_weight_interpolator->isEmpty()) {
               double zmp_weight_output[4];
               zmp_weight_interpolator->get(zmp_weight_output, true);
-              zmp_weight_map = boost::assign::map_list_of<leg_type, double>(RLEG, zmp_weight_output[0])(LLEG, zmp_weight_output[1])(RARM, zmp_weight_output[2])(LARM, zmp_weight_output[3]).convert_to_container < std::map<leg_type, double> > ();
+              zmp_weight_map = boost::assign::map_list_of<leg_type, double>
+                  (RLEG, zmp_weight_output[0])(LLEG, zmp_weight_output[1])
+                  (RARM, zmp_weight_output[2])(LARM, zmp_weight_output[3])
+                  .convert_to_container<std::map<leg_type, double> > ();
           }
       };
 #ifdef FOR_TESTGAITGENERATOR
@@ -650,7 +653,7 @@ namespace rats
         return calc_antecedent_path_base(cycloid_path);
       };
     };
-    
+
     class cross_delay_hoffarbib_trajectory_generator : public delay_hoffarbib_trajectory_generator
     {
     private:

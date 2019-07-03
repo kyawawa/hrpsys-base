@@ -186,6 +186,7 @@ public:
             it->second.pos_ik_error_count = it->second.rot_ik_error_count = 0;
         }
     }
+    // TODO: erase AutoBalancerService
     // Get IKparam
     void getIKParam (std::vector<std::string>& ee_vec, _CORBA_Unbounded_Sequence<OpenHRP::AutoBalancerService::IKLimbParameters>& ik_limb_parameters)
     {
@@ -254,24 +255,28 @@ public:
     void limbStretchAvoidanceControl (const std::vector<hrp::Vector3>& target_p, const std::vector<std::string>& target_name)
     {
       m_robot->calcForwardKinematics();
-      double tmp_d_root_height = 0.0, prev_d_root_height = d_root_height;
+      const double prev_d_root_height = d_root_height;
       if (use_limb_stretch_avoidance) {
+        double tmp_d_root_height = 0.0;
         for (size_t i = 0; i < target_p.size(); i++) {
           // Check whether inside limb length limitation
-          hrp::Link* parent_link = m_robot->link(ikp[target_name[i]].parent_name);
-          hrp::Vector3 rel_target_p = target_p[i] - parent_link->p; // position from parent to target link (world frame)
-          double limb_length_limitation = ikp[target_name[i]].max_limb_length - ikp[target_name[i]].limb_length_margin;
-          double tmp = limb_length_limitation * limb_length_limitation - rel_target_p(0) * rel_target_p(0) - rel_target_p(1) * rel_target_p(1);
+          const hrp::Link* parent_link = m_robot->link(ikp[target_name[i]].parent_name);
+          const hrp::Vector3 rel_target_p = target_p[i] - parent_link->p; // position from parent to target link (world frame)
+          const double limb_length_limitation = ikp[target_name[i]].max_limb_length - ikp[target_name[i]].limb_length_margin;
+          const double tmp = limb_length_limitation * limb_length_limitation - rel_target_p(0) * rel_target_p(0) - rel_target_p(1) * rel_target_p(1); // TODO: rename (極限状態で足が届くかどうか)
           if (rel_target_p.norm() > limb_length_limitation && tmp >= 0) {
             tmp_d_root_height = std::min(tmp_d_root_height, rel_target_p(2) + std::sqrt(tmp));
           }
         }
         // Change root link height depending on limb length
-        d_root_height = tmp_d_root_height == 0.0 ? (- 1/limb_stretch_avoidance_time_const * d_root_height * m_dt + d_root_height) : tmp_d_root_height;
+        d_root_height = tmp_d_root_height == 0.0 ?
+            (-1 / limb_stretch_avoidance_time_const * d_root_height * m_dt + d_root_height) : tmp_d_root_height;
       } else {
-        d_root_height = - 1/limb_stretch_avoidance_time_const * d_root_height * m_dt + d_root_height;
+        d_root_height = -1 / limb_stretch_avoidance_time_const * d_root_height * m_dt + d_root_height;
       }
-      d_root_height = vlimit(d_root_height, prev_d_root_height + limb_stretch_avoidance_vlimit[0], prev_d_root_height + limb_stretch_avoidance_vlimit[1]);
+      d_root_height = vlimit(d_root_height,
+                             prev_d_root_height + limb_stretch_avoidance_vlimit[0],
+                             prev_d_root_height + limb_stretch_avoidance_vlimit[1]);
       m_robot->rootLink()->p(2) += d_root_height;
     };
     double vlimit(const double value, const double llimit_value, const double ulimit_value)

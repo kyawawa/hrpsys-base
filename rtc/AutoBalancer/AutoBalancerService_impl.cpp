@@ -59,6 +59,16 @@ CORBA::Boolean AutoBalancerService_impl::stopAutoBalancer()
   return m_autobalancer->stopAutoBalancer();
 };
 
+void AutoBalancerService_impl::startStabilizer(void)
+{
+  m_autobalancer->startStabilizer();
+}
+
+void AutoBalancerService_impl::stopStabilizer(void)
+{
+  m_autobalancer->stopStabilizer();
+}
+
 CORBA::Boolean AutoBalancerService_impl::setGaitGeneratorParam(const OpenHRP::AutoBalancerService::GaitGeneratorParam& i_param)
 {
   return m_autobalancer->setGaitGeneratorParam(i_param);
@@ -83,6 +93,17 @@ CORBA::Boolean AutoBalancerService_impl::getAutoBalancerParam(OpenHRP::AutoBalan
   i_param = new OpenHRP::AutoBalancerService::AutoBalancerParam();
   return m_autobalancer->getAutoBalancerParam(*i_param);
 };
+
+void AutoBalancerService_impl::setStabilizerParam(const OpenHRP::AutoBalancerService::StabilizerParam& i_param)
+{
+  m_autobalancer->setStabilizerParam(i_param);
+}
+
+void AutoBalancerService_impl::getStabilizerParam(OpenHRP::AutoBalancerService::StabilizerParam_out i_param)
+{
+  i_param = new OpenHRP::AutoBalancerService::StabilizerParam();
+  return m_autobalancer->getStabilizerParam(*i_param);
+}
 
 CORBA::Boolean AutoBalancerService_impl::getFootstepParam(OpenHRP::AutoBalancerService::FootstepParam_out i_param)
 {
@@ -113,5 +134,4 @@ CORBA::Boolean AutoBalancerService_impl::releaseEmergencyStop()
 void AutoBalancerService_impl::autobalancer(AutoBalancer *i_autobalancer)
 {
   m_autobalancer = i_autobalancer;
-} 
-
+}

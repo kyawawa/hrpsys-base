@@ -36,14 +36,14 @@ void MyModuleInit(RTC::Manager* manager)
 
   // getting port profiles
 //  std::cout << "Number of Ports: ";
-//  std::cout << portlist->length() << std::endl << std::endl; 
+//  std::cout << portlist->length() << std::endl << std::endl;
 //  for (CORBA::ULong i(0), n(portlist->length()); i < n; ++i)
 //  {
 //    Port_ptr port;
 //    port = (*portlist)[i];
 //    std::cout << "Port" << i << " (name): ";
 //    std::cout << port->get_port_profile()->name << std::endl;
-//    
+//
 //    RTC::PortInterfaceProfileList iflist;
 //    iflist = port->get_port_profile()->interfaces;
 //    std::cout << "---interfaces---" << std::endl;

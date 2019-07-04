@@ -80,8 +80,9 @@ public:
         qrefv.resize(m_robot->numJoints());
         limb_stretch_avoidance_vlimit[0] = -1000 * 1e-3 * _dt; // lower limit
         limb_stretch_avoidance_vlimit[1] = 50 * 1e-3 * _dt; // upper limit
-    };
-    ~SimpleFullbodyInverseKinematicsSolver () {};
+    }
+
+    virtual ~SimpleFullbodyInverseKinematicsSolver() {};
 
     void initializeInterlockingJoints (std::vector<std::pair<hrp::Link*, hrp::Link*> > & interlocking_joints)
     {
@@ -89,7 +90,8 @@ public:
             std::cerr << "[" << print_str << "] Interlocking Joints for [" << it->first << "]" << std::endl;
             it->second.manip->setInterlockingJointPairIndices(interlocking_joints, print_str);
         }
-    };
+    }
+
     void storeCurrentParameters()
     {
         current_root_p = m_robot->rootLink()->p;
@@ -97,7 +99,8 @@ public:
         for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ){
             qorg[i] = m_robot->joint(i)->q;
         }
-    };
+    }
+
     void revertRobotStateToCurrent ()
     {
         for ( std::map<std::string, IKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
@@ -111,42 +114,50 @@ public:
         m_robot->rootLink()->p = current_root_p;
         m_robot->rootLink()->R = current_root_R;
         m_robot->calcForwardKinematics();
-    };
+    }
+
     void setReferenceJointAngles ()
     {
         for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ){
             qrefv[i] = m_robot->joint(i)->q;
         }
-    };
+    }
+
     // Solve fullbody IK using limb IK
     void solveFullbodyIK (const hrp::Vector3& _dif_cog, const bool is_transition)
     {
-        hrp::Vector3 dif_cog(ratio_for_vel*_dif_cog);
+        hrp::Vector3 dif_cog(ratio_for_vel * _dif_cog);
         dif_cog(2) = m_robot->rootLink()->p(2) - target_root_p(2);
+
         m_robot->rootLink()->p = m_robot->rootLink()->p + -1 * move_base_gain * dif_cog;
         m_robot->rootLink()->R = target_root_R;
+
         // Avoid limb stretch
         {
-          std::vector<hrp::Vector3> tmp_p;
-          std::vector<std::string> tmp_name;
-          for ( std::map<std::string, IKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-            if (it->first.find("leg") != std::string::npos) {
-              tmp_p.push_back(it->second.target_p0);
-              tmp_name.push_back(it->first);
+            std::vector<hrp::Vector3> target_pos_list;
+            std::vector<std::string> target_name_list;
+            target_pos_list.reserve(ikp.size());
+            target_name_list.reserve(ikp.size());
+            for (const auto& ik_param : ikp) {
+                if (ik_param.first.find("leg") != std::string::npos) {
+                    target_pos_list.push_back(ik_param.second.target_p0);
+                    target_name_list.push_back(ik_param.first);
+                }
             }
-          }
-          limbStretchAvoidanceControl(tmp_p, tmp_name);
+            limbStretchAvoidanceControl(target_pos_list, target_name_list);
         }
+
         // Overwrite by ref joint angle
         for (size_t i = 0; i < overwrite_ref_ja_index_vec.size(); i++) {
             m_robot->joint(overwrite_ref_ja_index_vec[i])->q = qrefv[overwrite_ref_ja_index_vec[i]];
         }
         m_robot->calcForwardKinematics();
-        for ( std::map<std::string, IKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-            if (it->second.is_ik_enable) solveLimbIK (it->second, it->first, ratio_for_vel, is_transition);
+
+        for (auto& ik_param : ikp) {
+            if (ik_param.second.is_ik_enable) solveLimbIK (ik_param.second, ik_param.first, ratio_for_vel, is_transition);
         }
-    };
-    // Solve limb IK
+    }
+
     bool solveLimbIK (IKparam& param, const std::string& limb_name, const double ratio_for_vel, const bool is_transition)
     {
         param.manip->calcInverseKinematics2Loop(param.target_p0, param.target_r0, 1.0, param.avoid_gain, param.reference_gain, &qrefv, ratio_for_vel,
@@ -154,7 +165,7 @@ public:
         checkIKTracking(param, limb_name, is_transition);
         return true;
     }
-    // IK fail check
+
     void checkIKTracking (IKparam& param, const std::string& limb_name, const bool is_transition)
     {
         hrp::Vector3 vel_p, vel_r;
@@ -179,13 +190,14 @@ public:
             param.rot_ik_error_count = 0;
         }
     };
-    // Reset IK fail params
+
     void resetIKFailParam() {
         has_ik_failed = false;
         for ( std::map<std::string, IKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
             it->second.pos_ik_error_count = it->second.rot_ik_error_count = 0;
         }
     }
+
     // TODO: erase AutoBalancerService
     // Get IKparam
     void getIKParam (std::vector<std::string>& ee_vec, _CORBA_Unbounded_Sequence<OpenHRP::AutoBalancerService::IKLimbParameters>& ik_limb_parameters)

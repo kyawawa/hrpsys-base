@@ -580,38 +580,37 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 //        }
 //        updateInvDynStateBuffer(idsb);
 
-        rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
+        rel_ref_zmp = target_root_R * (ref_zmp - target_root_p);
     } else {
         rel_ref_zmp = input_zmp;
         fik->d_root_height = 0.0;
     }
 
-    hrp::Vector3  ref_basePos = m_robot->rootLink()->p;
-    hrp::Matrix33 ref_baseRot = m_robot->rootLink()->R;
+    hrp::Vector3  ref_basePos = target_root_p;
+    hrp::Matrix33 ref_baseRot = target_root_R;
     // Transition
     if (!is_transition_interpolator_empty) {
         // transition_interpolator_ratio 0=>1 : IDLE => ABC
         // transition_interpolator_ratio 1=>0 : ABC => IDLE
-        ref_basePos = calcInteriorPoint(input_basePos, m_robot->rootLink()->p, transition_interpolator_ratio);
+        ref_basePos = calcInteriorPoint(input_basePos, target_root_p, transition_interpolator_ratio);
         rel_ref_zmp = calcInteriorPoint(input_zmp, rel_ref_zmp, transition_interpolator_ratio);
-        rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
+        rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, target_root_R);
 
-        // TODO: use function
-        for (unsigned int i = 0; i < m_robot->numJoints(); i++) {
+        for (unsigned int i = 0; i < m_robot->numJoints(); ++i) {
             m_robot->joint(i)->q = calcInteriorPoint(m_qRef.data[i], m_robot->joint(i)->q, transition_interpolator_ratio);
         }
 
-        for (unsigned int i = 0; i < m_force.size(); i++) {
-            for (unsigned int j = 0; j < 6; j++) {
+        for (unsigned int i = 0; i < m_force.size(); ++i) {
+            for (unsigned int j = 0; j < 6; ++j) {
                 m_force[i].data[j] = calcInteriorPoint(m_force[i].data[j], m_ref_force[i].data[j], transition_interpolator_ratio);
             }
         }
 
         for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
             // transition (TODO:set stopABCmode value instead of 0)
-            m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;// + (1-transition_interpolator_ratio) * 0;
-            m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;// + (1-transition_interpolator_ratio) * 0;
-            m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;// + (1-transition_interpolator_ratio) * 0;
+            m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;
+            m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;
+            m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;
         }
     }
 
@@ -625,8 +624,10 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     }
 
     // Stabilizer
-    hrp::dvector abc_qref(m_robot->numJoints());
+    hrp::dvector abc_qref(m_robot->numJoints()); // TODO: IKなしで大丈夫か，必要か
     copyJointAnglesFromRobotModel(abc_qref, m_robot);
+
+    // TODO: Rotをわざわざrpyにして渡すのはNG
     const hrp::Vector3 baseRpy = hrp::rpyFromRot(ref_baseRot);
     // TODO: 関数化
     std::vector<bool> ref_contact_states(m_contactStates.data.length());
@@ -659,10 +660,14 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         }
     }
 
+    // TODO: STでtarget_root_pとikpのtarget_p0, target_r0を更新
+    //       ikpを共通化して、STに渡す (ぐずぐずになるのはいまいちな気もするが)
     st->execStabilizer(paramsToStabilizer{abc_qref, rel_ref_zmp, ref_basePos,
                                           baseRpy, ref_contact_states, toe_heel_ratio,
                                           control_swing_support_time, ref_wrenches},
                        paramsFromSensors{q_current, rpy, wrenches});
+
+    // TODO: ここでIKをとく
 
     // Write outport data for legged robot
     {
@@ -1223,12 +1228,13 @@ void AutoBalancer::fixLegToCoords2 (coordinates& tmp_fix_coords)
     // This will be removed after seq outputs adequate waistRPY discussed in https://github.com/fkanehiro/hrpsys-base/issues/272
     // Snap input tmp_fix_coords to XY plan projection.
     {
-      hrp::Vector3 ex = hrp::Vector3::UnitX();
-      hrp::Vector3 ez = hrp::Vector3::UnitZ();
-      hrp::Vector3 xv1 (tmp_fix_coords.rot * ex);
+      const hrp::Vector3 ex = hrp::Vector3::UnitX();
+      const hrp::Vector3 ez = hrp::Vector3::UnitZ();
+      hrp::Vector3 xv1(tmp_fix_coords.rot * ex);
       xv1(2) = 0.0;
       xv1.normalize();
-      hrp::Vector3 yv1(ez.cross(xv1));
+      const hrp::Vector3 yv1(ez.cross(xv1));
+      // TODO: 整理
       tmp_fix_coords.rot(0,0) = xv1(0); tmp_fix_coords.rot(1,0) = xv1(1); tmp_fix_coords.rot(2,0) = xv1(2);
       tmp_fix_coords.rot(0,1) = yv1(0); tmp_fix_coords.rot(1,1) = yv1(1); tmp_fix_coords.rot(2,1) = yv1(2);
       tmp_fix_coords.rot(0,2) = ez(0); tmp_fix_coords.rot(1,2) = ez(1); tmp_fix_coords.rot(2,2) = ez(2);
@@ -1241,22 +1247,24 @@ void AutoBalancer::solveFullbodyIK ()
     // Set ik target params
     fik->target_root_p = target_root_p;
     fik->target_root_R = target_root_R;
-    for ( std::map<std::string, SimpleFullbodyInverseKinematicsSolver::IKparam>::iterator it = fik->ikp.begin(); it != fik->ikp.end(); it++ ) {
-        it->second.target_p0 = ikp[it->first].target_p0;
-        it->second.target_r0 = ikp[it->first].target_r0;
+
+    for (auto& fikp : fik->ikp) {
+        fikp.second.target_p0 = ikp[fikp.first].target_p0;
+        fikp.second.target_r0 = ikp[fikp.first].target_r0;
     }
+
+    for (auto& abc_ikp : ikp) {
+        fik->ikp[abc_ikp.first].is_ik_enable = abc_ikp.second.is_active;
+    }
+
     fik->ratio_for_vel = transition_interpolator_ratio * leg_names_interpolator_ratio;
-//  fik->current_tm = m_qRef.tm;
-    for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
-        fik->ikp[it->first].is_ik_enable = it->second.is_active;
-    }
-    // Revert
     fik->revertRobotStateToCurrent();
+
     // TODO : SBP calculation is outside of solve ik?
-    hrp::Vector3 tmp_input_sbp = hrp::Vector3(0,0,0);
+    hrp::Vector3 tmp_input_sbp = hrp::Vector3::Zero(); // TODO: rename
     static_balance_point_proc_one(tmp_input_sbp, ref_zmp(2));
-    hrp::Vector3 dif_cog = tmp_input_sbp - ref_cog;
-    // Solve IK
+    const hrp::Vector3 dif_cog = tmp_input_sbp - ref_cog;
+
     fik->solveFullbodyIK (dif_cog, transition_interpolator->isEmpty());
 }
 

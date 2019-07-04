@@ -179,6 +179,14 @@ void Stabilizer::initStabilizer(const RTC::Properties& prop, const size_t ee_num
         toe_heel_ratio.push_back(1.0);
         contact_cop_info.push_back(hrp::Vector3::Zero());
         wrenches.push_back(hrp::dvector6::Zero());
+
+        const bool is_ee_leg = stikp[i].ee_name.find("leg") != std::string::npos ? true : false;
+        // Hands ik => disabled, feet ik => enabled, by default
+        is_ik_enable.push_back(is_ee_leg);
+        // Hands feedback control => disabled, feet feedback control => enabled, by default
+        is_feedback_control_enable.push_back(is_ee_leg);
+        // To zmp calculation, hands are disabled and feet are enabled, by default
+        is_zmp_calc_enable.push_back(is_ee_leg);
     }
     transition_time = 2.0;
     foot_origin_offset[0] = hrp::Vector3::Zero();

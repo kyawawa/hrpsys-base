@@ -7,7 +7,7 @@
  * $Id$
  */
 
-#include <boost/make_shared.hpp> // TODO: use std::make_shared for future
+#include <boost/make_shared.hpp>
 #include "hrpsys/util/Hrpsys.h"
 #include <hrpModel/Sensor.h>
 #include <hrpUtil/MatrixSolvers.h>
@@ -107,6 +107,10 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
       m_cogOut("cogOut", m_cog),
+      m_originNewRefZmpOut("originNewRefZmp", m_originNewRefZmp),
+      m_footOriginRefCogOut("footOriginRefCog", m_footOriginRefCog),
+      m_footOriginActCogOut("footOriginActCog", m_footOriginActCog),
+      m_actContactStatesOut("actContactStates", m_actContactStates),
 
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
@@ -169,6 +173,10 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("toeheelRatio", m_toeheelRatioOut);
     addOutPort("controlSwingSupportTime", m_controlSwingSupportTimeOut);
     addOutPort("cogOut", m_cogOut);
+    addOutPort("originNewRefZmp", m_originNewRefZmpOut);
+    addOutPort("footOriginRefCog", m_footOriginRefCogOut);
+    addOutPort("footOriginActCog", m_footOriginActCogOut);
+    addOutPort("actContactStates", m_actContactStatesOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
 
@@ -211,17 +219,15 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     m_qRef.data.length(m_robot->numJoints());
     m_baseTform.data.length(12);
 
-    // Generate FIK
     fik = std::make_shared<SimpleFullbodyInverseKinematicsSolver>(m_robot, std::string(m_profile.instance_name), m_dt);
 
-    // Generate ST
-    st = std::make_shared<Stabilizer>(m_robot, std::string(m_profile.instance_name), m_dt);
+    st = std::make_shared<Stabilizer>(m_robot, std::string(m_profile.instance_name) + "_ST", m_dt);
 
     // setting from conf file
     // rleg,TARGET_LINK,BASE_LINK
     const coil::vstring end_effectors_str = coil::split(prop["end_effectors"], ",");
-    const size_t prop_num = 10;
     const unsigned int num_pfsensors = m_robot->numSensors(hrp::Sensor::FORCE);
+    constexpr size_t prop_num = 10;
 
     if (end_effectors_str.size() > 0) {
         const size_t ee_num = end_effectors_str.size() / prop_num;
@@ -231,9 +237,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
             const std::string ee_target(end_effectors_str[i*prop_num + 1]);
             const std::string ee_base(end_effectors_str[i*prop_num + 2]);
 
-            ABCIKparam tp; // TODO: rename
+            ABCIKparam ik_param; // TODO: rename
             for (size_t j = 0; j < 3; j++) {
-                coil::stringTo(tp.localPos(j), end_effectors_str[i*prop_num+3+j].c_str());
+                coil::stringTo(ik_param.localPos(j), end_effectors_str[i*prop_num+3+j].c_str());
             }
 
             {
@@ -242,16 +248,16 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                     coil::stringTo(ee_local_rot[j], end_effectors_str[i*prop_num+6+j].c_str());
                 }
                 // rotation in VRML is represented by axis + angle
-                tp.localR = Eigen::AngleAxisd(ee_local_rot[3], hrp::Vector3(ee_local_rot[0], ee_local_rot[1], ee_local_rot[2])).toRotationMatrix();
+                ik_param.localR = Eigen::AngleAxisd(ee_local_rot[3], hrp::Vector3(ee_local_rot[0], ee_local_rot[1], ee_local_rot[2])).toRotationMatrix();
             }
 
             // FIK param
             {
                 SimpleFullbodyInverseKinematicsSolver::IKparam tmp_fikp;
-                tmp_fikp.manip = hrp::JointPathExPtr(new hrp::JointPathEx(m_robot, m_robot->link(ee_base), m_robot->link(ee_target), m_dt, false, std::string(m_profile.instance_name)));
+                tmp_fikp.manip = boost::make_shared<hrp::JointPathEx>(m_robot, m_robot->link(ee_base), m_robot->link(ee_target), m_dt, false, std::string(m_profile.instance_name));
                 tmp_fikp.target_link = m_robot->link(ee_target);
-                tmp_fikp.localPos = tp.localPos;
-                tmp_fikp.localR = tp.localR;
+                tmp_fikp.localPos = ik_param.localPos;
+                tmp_fikp.localR = ik_param.localR;
                 tmp_fikp.max_limb_length = 0.0;
 
                 hrp::Link* root = m_robot->link(ee_target);
@@ -271,13 +277,13 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                 std::vector<double> weights(fik->ikp[ee_name].manip->numJoints(), 1.0);
                 weights.back() = 0.0; // Set weight = 0 for toe joint by default
                 fik->ikp[ee_name].manip->setOptionalWeightVector(weights);
-                tp.has_toe_joint = true;
+                ik_param.has_toe_joint = true;
             } else {
-                tp.has_toe_joint = false;
+                ik_param.has_toe_joint = false;
             }
 
-            tp.target_link = m_robot->link(ee_target);
-            ikp.insert(std::pair<std::string, ABCIKparam>(ee_name , tp));
+            ik_param.target_link = m_robot->link(ee_target);
+            ikp.insert(std::pair<std::string, ABCIKparam>(ee_name , ik_param));
             ee_vec.push_back(ee_name);
 
             // For Stabilizer IK TODO: IKを統合して消す
@@ -295,7 +301,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                         alink = alink->parent;
                     }
                 }
-                st->addSTIKParam(ee_name, ee_target, ikp_sensor_name);
+                st->addSTIKParam(ee_name, ee_target, ee_base, ikp_sensor_name, ik_param.localPos, ik_param.localR);
             }
 
             std::cerr << "[" << m_profile.instance_name
@@ -304,10 +310,10 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                       << "]   target = " << ikp[ee_name].target_link->name
                       << ", base = " << ee_base << std::endl;
             std::cerr << "[" << m_profile.instance_name << "]   offset_pos = "
-                      << tp.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]"))
+                      << ik_param.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]"))
                       << "[m]" << std::endl;
             std::cerr << "[" << m_profile.instance_name << "]   has_toe_joint = "
-                      << (tp.has_toe_joint?"true":"false") << std::endl;
+                      << (ik_param.has_toe_joint?"true":"false") << std::endl;
             contact_states_index_map.insert(std::pair<std::string, size_t>(ee_name, i));
         }
 
@@ -322,9 +328,13 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
         }
 
         m_controlSwingSupportTime.data.length(ee_num);
-        for (size_t i = 0; i < ee_num; i++) m_controlSwingSupportTime.data[i] = 1.0;
         m_toeheelRatio.data.length(ee_num);
-        for (size_t i = 0; i < ee_num; i++) m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
+        m_actContactStates.data.length(ee_num);
+        for (size_t i = 0; i < ee_num; i++) {
+            m_controlSwingSupportTime.data[i] = 1.0;
+            m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
+            m_actContactStates.data[i] = false;
+        }
 
         // TODO: 場所や初期化の見直し
         st->initStabilizer(prop, ee_num);
@@ -339,24 +349,22 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     }
 
     // TODO: not to use raw pointer for interpolators
-    zmp_offset_interpolator = new interpolator(ikp.size()*3, m_dt);
+    zmp_offset_interpolator = std::make_unique<interpolator>(ikp.size() * 3, m_dt);
     zmp_offset_interpolator->setName(std::string(m_profile.instance_name)+" zmp_offset_interpolator");
     zmp_transition_time = 1.0;
-    transition_interpolator = new interpolator(1, m_dt, interpolator::HOFFARBIB, 1);
+    transition_interpolator = std::make_unique<interpolator>(1, m_dt, interpolator::HOFFARBIB, 1);
     transition_interpolator->setName(std::string(m_profile.instance_name)+" transition_interpolator");
     transition_interpolator_ratio = 0.0;
-    adjust_footstep_interpolator = new interpolator(1, m_dt, interpolator::HOFFARBIB, 1);
+    adjust_footstep_interpolator = std::make_unique<interpolator>(1, m_dt, interpolator::HOFFARBIB, 1);
     adjust_footstep_interpolator->setName(std::string(m_profile.instance_name)+" adjust_footstep_interpolator");
     transition_time = 2.0;
     adjust_footstep_transition_time = 2.0;
-    leg_names_interpolator = new interpolator(1, m_dt, interpolator::HOFFARBIB, 1);
+    leg_names_interpolator = std::make_unique<interpolator>(1, m_dt, interpolator::HOFFARBIB, 1);
     leg_names_interpolator->setName(std::string(m_profile.instance_name)+" leg_names_interpolator");
     leg_names_interpolator_ratio = 1.0;
 
-    // TODO: 確認 size != 0とは．0のときのみ初期化であっている？
-    if (default_zmp_offsets.size() == 0) {
-        for (size_t i = 0; i < ikp.size(); i++) default_zmp_offsets.push_back(hrp::Vector3::Zero());
-    }
+    default_zmp_offsets.resize(ikp.size(), hrp::Vector3::Zero());
+    limb_cop_offsets.resize(ikp.size(), hrp::Vector3::Zero());
 
     {
         // GaitGenerator requires abc_leg_offset and abc_stride_parameter in robot conf file
@@ -383,13 +391,13 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
             leg_names.push_back("rleg");
             leg_names.push_back("lleg");
 
-            // setting stride limitations from conf file
-            double stride_fwd_x_limit      = 0.15;
-            double stride_outside_y_limit  = 0.05;
-            double stride_outside_th_limit = 10;
-            double stride_bwd_x_limit      = 0.05;
-            double stride_inside_y_limit   = stride_outside_y_limit * 0.5;
-            double stride_inside_th_limit  = stride_outside_th_limit * 0.5;
+            // setting stride limitations from conf file <- TODO: 確認
+            constexpr double stride_fwd_x_limit      = 0.15;
+            constexpr double stride_outside_y_limit  = 0.05;
+            constexpr double stride_outside_th_limit = 10;
+            constexpr double stride_bwd_x_limit      = 0.05;
+            constexpr double stride_inside_y_limit   = stride_outside_y_limit * 0.5;
+            constexpr double stride_inside_th_limit  = stride_outside_th_limit * 0.5;
             std::cerr << "[" << m_profile.instance_name << "] abc_stride_parameter : "
                       << stride_fwd_x_limit << "[m], "
                       << stride_outside_y_limit << "[m], "
@@ -397,8 +405,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
                       << stride_bwd_x_limit << "[m]"
                       << std::endl;
 
-            gg = ggPtr(new rats::gait_generator(m_dt, leg_pos, leg_names, stride_fwd_x_limit/*[m]*/, stride_outside_y_limit/*[m]*/, stride_outside_th_limit/*[deg]*/,
-                                                stride_bwd_x_limit/*[m]*/, stride_inside_y_limit/*[m]*/, stride_inside_th_limit/*[m]*/));
+            gg = std::make_shared<rats::gait_generator>(m_dt, leg_pos, leg_names,
+                                                        stride_fwd_x_limit/*[m]*/, stride_outside_y_limit/*[m]*/, stride_outside_th_limit/*[deg]*/,
+                                                        stride_bwd_x_limit/*[m]*/, stride_inside_y_limit/*[m]*/, stride_inside_th_limit/*[deg]*/);
             gg->set_default_zmp_offsets(default_zmp_offsets);
         }
     }
@@ -495,11 +504,6 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
 RTC::ReturnCode_t AutoBalancer::onFinalize()
 {
-    // TODO: use smart pointer
-    delete zmp_offset_interpolator;
-    delete transition_interpolator;
-    delete adjust_footstep_interpolator;
-    delete leg_names_interpolator;
     return RTC::RTC_OK;
 }
 
@@ -546,11 +550,8 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         return RTC::RTC_OK;
     }
 
-    // Calculation
     Guard guard(m_mutex); // TODO: スコープ確認
 
-    // For parameters
-    fik->storeCurrentParameters();
     getTargetParameters();
 
     // Get transition ratio
@@ -580,21 +581,23 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 //        }
 //        updateInvDynStateBuffer(idsb);
 
-        rel_ref_zmp = target_root_R * (ref_zmp - target_root_p);
+        rel_ref_zmp = m_robot->rootLink()->R.transpose() * (ref_zmp - m_robot->rootLink()->p);
     } else {
         rel_ref_zmp = input_zmp;
         fik->d_root_height = 0.0;
     }
 
-    hrp::Vector3  ref_basePos = target_root_p;
-    hrp::Matrix33 ref_baseRot = target_root_R;
+    // hrp::Vector3  ref_basePos = target_root_p; // TODO: 今の実装だと違う
+    // hrp::Matrix33 ref_baseRot = target_root_R;
+    hrp::Vector3  ref_basePos = m_robot->rootLink()->p;
+    hrp::Matrix33 ref_baseRot = m_robot->rootLink()->R;
     // Transition
     if (!is_transition_interpolator_empty) {
         // transition_interpolator_ratio 0=>1 : IDLE => ABC
         // transition_interpolator_ratio 1=>0 : ABC => IDLE
-        ref_basePos = calcInteriorPoint(input_basePos, target_root_p, transition_interpolator_ratio);
+        ref_basePos = calcInteriorPoint(input_basePos, m_robot->rootLink()->p, transition_interpolator_ratio);
         rel_ref_zmp = calcInteriorPoint(input_zmp, rel_ref_zmp, transition_interpolator_ratio);
-        rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, target_root_R);
+        rats::mid_rot(ref_baseRot, transition_interpolator_ratio, input_baseRot, m_robot->rootLink()->R);
 
         for (unsigned int i = 0; i < m_robot->numJoints(); ++i) {
             m_robot->joint(i)->q = calcInteriorPoint(m_qRef.data[i], m_robot->joint(i)->q, transition_interpolator_ratio);
@@ -606,11 +609,9 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
             }
         }
 
-        for (unsigned int i = 0; i < m_limbCOPOffset.size(); i++) {
+        for (hrp::Vector3& limb_cop_offset : limb_cop_offsets) {
             // transition (TODO:set stopABCmode value instead of 0)
-            m_limbCOPOffset[i].data.x = transition_interpolator_ratio * m_limbCOPOffset[i].data.x;
-            m_limbCOPOffset[i].data.y = transition_interpolator_ratio * m_limbCOPOffset[i].data.y;
-            m_limbCOPOffset[i].data.z = transition_interpolator_ratio * m_limbCOPOffset[i].data.z;
+            limb_cop_offset = limb_cop_offset * transition_interpolator_ratio;
         }
     }
 
@@ -623,8 +624,10 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         control_mode = MODE_IDLE;
     }
 
+    fik->storeCurrentParameters();
+
     // Stabilizer
-    hrp::dvector abc_qref(m_robot->numJoints()); // TODO: IKなしで大丈夫か，必要か
+    hrp::dvector abc_qref(m_robot->numJoints()); // TODO: IKなしで大丈夫なのか，必要なのか
     copyJointAnglesFromRobotModel(abc_qref, m_robot);
 
     // TODO: Rotをわざわざrpyにして渡すのはNG
@@ -652,7 +655,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     for (size_t i = 0; i < m_robot->numJoints(); ++i) {
         q_current[i] = m_qCurrent.data[i];
     }
-    hrp::Vector3 rpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y);
+    const hrp::Vector3 rpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y);
     std::vector<hrp::dvector6> wrenches(m_wrenches.size());
     for (size_t i = 0; i < m_wrenches.size(); ++i) {
         for (size_t j = 0; j < 6; ++j) {
@@ -663,9 +666,11 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     // TODO: STでtarget_root_pとikpのtarget_p0, target_r0を更新
     //       ikpを共通化して、STに渡す (ぐずぐずになるのはいまいちな気もするが)
     st->execStabilizer(paramsToStabilizer{abc_qref, rel_ref_zmp, ref_basePos,
-                                          baseRpy, ref_contact_states, toe_heel_ratio,
-                                          control_swing_support_time, ref_wrenches},
+                                          baseRpy, gg_is_walking, ref_contact_states, toe_heel_ratio,
+                                          control_swing_support_time, ref_wrenches, limb_cop_offsets,
+                                          sbp_cog_offset},
                        paramsFromSensors{q_current, rpy, wrenches});
+    const stabilizerLogData st_log_data = st->getStabilizerLogData();
 
     // TODO: ここでIKをとく
 
@@ -712,6 +717,30 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         m_cog.data.z = ref_cog(2);
         m_cogOut.write();
 
+        m_originNewRefZmp.tm = m_qRef.tm;
+        m_originNewRefZmp.data.x = st_log_data.new_ref_zmp(0);
+        m_originNewRefZmp.data.y = st_log_data.new_ref_zmp(1);
+        m_originNewRefZmp.data.z = st_log_data.new_ref_zmp(2);
+        m_originNewRefZmpOut.write();
+
+        m_footOriginRefCog.tm = m_qRef.tm;
+        m_footOriginRefCog.data.x = st_log_data.origin_ref_cog(0);
+        m_footOriginRefCog.data.y = st_log_data.origin_ref_cog(1);
+        m_footOriginRefCog.data.z = st_log_data.origin_ref_cog(2);
+        m_footOriginRefCogOut.write();
+
+        m_footOriginActCog.tm = m_qRef.tm;
+        m_footOriginActCog.data.x = st_log_data.origin_act_cog(0);
+        m_footOriginActCog.data.y = st_log_data.origin_act_cog(1);
+        m_footOriginActCog.data.z = st_log_data.origin_act_cog(2);
+        m_footOriginActCogOut.write();
+
+        m_actContactStates.tm = m_qRef.tm;
+        for (size_t i = 0; i < st_log_data.act_contact_states.size(); ++i) {
+            m_actContactStates.data[i] = st_log_data.act_contact_states[i];
+        }
+        m_actContactStatesOut.write();
+
         m_sbpCogOffset.tm = m_qRef.tm;
         m_sbpCogOffset.data.x = sbp_cog_offset(0);
         m_sbpCogOffset.data.y = sbp_cog_offset(1);
@@ -754,6 +783,9 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 
         for (unsigned int i = 0; i < m_limbCOPOffsetOut.size(); i++){
             m_limbCOPOffset[i].tm = m_qRef.tm;
+            m_limbCOPOffset[i].data.x = limb_cop_offsets[i][0];
+            m_limbCOPOffset[i].data.y = limb_cop_offsets[i][1];
+            m_limbCOPOffset[i].data.z = limb_cop_offsets[i][2];
             m_limbCOPOffsetOut[i]->write();
         }
     }
@@ -932,18 +964,20 @@ void AutoBalancer::getOutputParametersForWalking ()
         if (std::find(leg_names.begin(), leg_names.end(), it->first) != leg_names.end()) {
             // Set EE coords
             gg->get_swing_support_ee_coords_from_ee_name(it->second.target_p0, it->second.target_r0, it->first);
+
             // Set contactStates
             m_contactStates.data[idx] = gg->get_current_support_state_from_ee_name(it->first);
+
             // Set controlSwingSupportTime
             m_controlSwingSupportTime.data[idx] = gg->get_current_swing_time_from_ee_name(it->first);
+
             // Set limbCOPOffset
-            hrp::Vector3 tmpzmpoff(m_limbCOPOffset[idx].data.x, m_limbCOPOffset[idx].data.y, m_limbCOPOffset[idx].data.z);
-            gg->get_swing_support_foot_zmp_offsets_from_ee_name(tmpzmpoff, it->first);
-            m_limbCOPOffset[idx].data.x = tmpzmpoff(0);
-            m_limbCOPOffset[idx].data.y = tmpzmpoff(1);
-            m_limbCOPOffset[idx].data.z = tmpzmpoff(2);
+            hrp::Vector3 foot_zmp_offset = limb_cop_offsets[idx];
+            gg->get_swing_support_foot_zmp_offsets_from_ee_name(foot_zmp_offset, it->first);
+            limb_cop_offsets[idx] = foot_zmp_offset;
+
             // Set toe heel ratio which can be used force moment distribution
-            double tmp = m_toeheelRatio.data[idx];
+            double tmp = m_toeheelRatio.data[idx]; // TODO: delete tmp
             gg->get_current_toe_heel_ratio_from_ee_name(tmp, it->first);
             m_toeheelRatio.data[idx] = tmp;
         } else { // Not included in leg_names
@@ -955,9 +989,7 @@ void AutoBalancer::getOutputParametersForWalking ()
             // controlSwingSupportTime is not used while double support period, 1.0 is neglected
             m_controlSwingSupportTime.data[idx] = 1.0;
             // Set limbCOPOffset
-            m_limbCOPOffset[idx].data.x = default_zmp_offsets[idx](0);
-            m_limbCOPOffset[idx].data.y = default_zmp_offsets[idx](1);
-            m_limbCOPOffset[idx].data.z = default_zmp_offsets[idx](2);
+            limb_cop_offsets[idx] = default_zmp_offsets[idx];
             // Set toe heel ratio which can be used force moment distribution
             m_toeheelRatio.data[idx] = rats::no_using_toe_heel_ratio;
         }
@@ -986,9 +1018,7 @@ void AutoBalancer::getOutputParametersForABC ()
         // controlSwingSupportTime is not used while double support period, 1.0 is neglected
         m_controlSwingSupportTime.data[idx] = 1.0;
         // Set limbCOPOffset
-        m_limbCOPOffset[idx].data.x = default_zmp_offsets[idx](0);
-        m_limbCOPOffset[idx].data.y = default_zmp_offsets[idx](1);
-        m_limbCOPOffset[idx].data.z = default_zmp_offsets[idx](2);
+        limb_cop_offsets[idx] = default_zmp_offsets[idx];
         // Set toe heel ratio is not used while double support
         m_toeheelRatio.data[idx] = rats::no_using_toe_heel_ratio;
     }
@@ -1013,9 +1043,7 @@ void AutoBalancer::getOutputParametersForIDLE ()
     for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
         size_t idx = contact_states_index_map[it->first];
         // Set limbCOPOffset
-        m_limbCOPOffset[idx].data.x = 0;
-        m_limbCOPOffset[idx].data.y = 0;
-        m_limbCOPOffset[idx].data.z = 0;
+        limb_cop_offsets[idx] = hrp::Vector3::Zero();
         // Set toe heel ratio is not used while double support
         m_toeheelRatio.data[idx] = rats::no_using_toe_heel_ratio;
     }
@@ -1024,7 +1052,7 @@ void AutoBalancer::getOutputParametersForIDLE ()
 void AutoBalancer::interpolateLegNamesAndZMPOffsets()
 {
     if (!zmp_offset_interpolator->isEmpty()) {
-      double *default_zmp_offsets_output = new double[ikp.size()*3];
+        double *default_zmp_offsets_output = new double[ikp.size()*3]; // TODO: new doubleを消す
       zmp_offset_interpolator->get(default_zmp_offsets_output, true);
       for (size_t i = 0; i < ikp.size(); i++)
         for (size_t j = 0; j < 3; j++)
@@ -1430,8 +1458,8 @@ void AutoBalancer::stopStabilizer(void)
 
 void AutoBalancer::waitABCTransition()
 {
-  while (!transition_interpolator->isEmpty()) usleep(1000);
-  usleep(1000);
+    while (!transition_interpolator->isEmpty()) usleep(1000);
+    usleep(1000);
 }
 
 bool AutoBalancer::goPos(const double& x, const double& y, const double& th)

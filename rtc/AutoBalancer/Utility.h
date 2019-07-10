@@ -11,8 +11,8 @@
 #include <cmath>
 #include <hrpModel/Body.h>
 
-inline double deg2rad(double deg) { return deg * M_PI / 180.0; }
-inline double rad2deg(double rad) { return rad * 180.0 / M_PI; }
+constexpr double deg2rad(double deg) { return deg * M_PI / 180.0; }
+constexpr double rad2deg(double rad) { return rad * 180.0 / M_PI; }
 
 inline double calcInteriorPoint(const double start, const double end, const double ratio)
 {

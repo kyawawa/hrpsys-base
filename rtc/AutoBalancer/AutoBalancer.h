@@ -195,6 +195,10 @@ class AutoBalancer
     std::vector<InPort<TimedDoubleSeq> *> m_wrenchesIn;
     // for debug
     TimedPoint3D m_cog;
+    TimedPoint3D m_originNewRefZmp;
+    TimedPoint3D m_footOriginRefCog;
+    TimedPoint3D m_footOriginActCog;
+    // TimedBooleanSeq m_actContactStates;
 
     // </rtc-template>
 
@@ -224,10 +228,14 @@ class AutoBalancer
     OutPort<TimedPoint3D> m_sbpCogOffsetOut;
     std::vector<TimedDoubleSeq> m_force;
     std::vector<OutPort<TimedDoubleSeq> *> m_ref_forceOut;
-    std::vector<TimedPoint3D> m_limbCOPOffset;
+    std::vector<TimedPoint3D> m_limbCOPOffset; // TODO: delete
     std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
     // for debug
     OutPort<TimedPoint3D> m_cogOut;
+    OutPort<TimedPoint3D> m_originNewRefZmpOut;
+    OutPort<TimedPoint3D> m_footOriginRefCogOut;
+    OutPort<TimedPoint3D> m_footOriginActCogOut;
+    OutPort<RTC::TimedBooleanSeq> m_actContactStatesOut;
 
     // </rtc-template>
 
@@ -294,8 +302,7 @@ class AutoBalancer
     std::string getUseForceModeString ();
 
     // for gg
-    using ggPtr = std::shared_ptr<rats::gait_generator>;
-    ggPtr gg;
+    std::shared_ptr<rats::gait_generator> gg;
     std::shared_ptr<Stabilizer> st;
     bool gg_is_walking, gg_solved;
     // for abc
@@ -312,6 +319,7 @@ class AutoBalancer
     hrp::Matrix33 target_root_R;
     rats::coordinates fix_leg_coords, fix_leg_coords2;
     std::vector<hrp::Vector3> default_zmp_offsets;
+    std::vector<hrp::Vector3> limb_cop_offsets;
     double m_dt;
     hrp::BodyPtr m_robot;
     std::mutex m_mutex;
@@ -319,10 +327,10 @@ class AutoBalancer
     bool use_limb_stretch_avoidance;
 
     double transition_interpolator_ratio, transition_time, zmp_transition_time, adjust_footstep_transition_time, leg_names_interpolator_ratio;
-    interpolator *zmp_offset_interpolator;
-    interpolator *transition_interpolator;
-    interpolator *adjust_footstep_interpolator;
-    interpolator *leg_names_interpolator;
+    std::unique_ptr<interpolator> zmp_offset_interpolator;
+    std::unique_ptr<interpolator> transition_interpolator;
+    std::unique_ptr<interpolator> adjust_footstep_interpolator;
+    std::unique_ptr<interpolator> leg_names_interpolator;
 
     hrp::Vector3 input_zmp, input_basePos;
     hrp::Matrix33 input_baseRot;

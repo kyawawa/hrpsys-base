@@ -25,10 +25,13 @@ struct paramsFromAutoBalancer {
     hrp::Vector3 zmp_ref;
     hrp::Vector3 base_pos_ref;
     hrp::Vector3 base_rpy_ref;
+    bool is_walking;
     std::vector<bool> ref_contact_states;
     std::vector<double> toe_heel_ratio;
     std::vector<double> controlSwingSupportTime; // TODO: rename
     std::vector<hrp::dvector6> wrenches_ref;
+    std::vector<hrp::Vector3> limb_cop_offsets;
+    hrp::Vector3 sbp_cog_offset;
 };
 
 struct paramsFromSensors {
@@ -37,10 +40,17 @@ struct paramsFromSensors {
     std::vector<hrp::dvector6> wrenches;
 };
 
+struct stabilizerLogData {
+    hrp::Vector3 new_ref_zmp;
+    hrp::Vector3 origin_ref_cog;
+    hrp::Vector3 origin_act_cog;
+    std::vector<bool> act_contact_states;
+};
+
 class Stabilizer
 {
   public: // TODO: public関数をprivateにする
-    Stabilizer(const hrp::BodyPtr& _robot, const std::string& _comp_name, const double _dt);
+    Stabilizer(hrp::BodyPtr _robot, const std::string& _comp_name, const double _dt);
     virtual ~Stabilizer() {};
 
     void initStabilizer(const RTC::Properties& prop, const size_t ee_num);
@@ -89,13 +99,23 @@ class Stabilizer
         return (transition_time / dt);
     }
     // TODO: tmporarary function: delete this function after merging autobalancer IK and stabilizer IK
-    void addSTIKParam(const std::string& ee_name, const std::string& target_name, const std::string& sensor_name)
+    void addSTIKParam(const std::string& ee_name, const std::string& target_name,
+                      const std::string& ee_base, const std::string& sensor_name,
+                      const hrp::Vector3& localp, const hrp::Matrix33& localR)
     {
         STIKParam ikp;
         ikp.ee_name = ee_name;
         ikp.target_name = target_name;
+        ikp.ee_base = ee_base;
         ikp.sensor_name = sensor_name;
+        ikp.localp = localp;
+        ikp.localR = localR;
         stikp.push_back(ikp);
+    }
+
+    stabilizerLogData getStabilizerLogData() const
+    {
+        return stabilizerLogData{new_refzmp, ref_cog, act_cog, act_contact_states};
     }
 
   private:
@@ -137,10 +157,11 @@ class Stabilizer
         {}
         std::string ee_name; // Name of ee (e.g., rleg, lleg, ...)
         std::string target_name; // Name of end link
+        std::string ee_base; // temporary
         std::string sensor_name; // Name of force sensor in the limb
         std::string parent_name; // Name of parent ling in the limb
         hrp::Vector3 localp; // Position of ee in end link frame (^{l}p_e = R_l^T (p_e - p_l))
-        hrp::Vector3 localCOPPos; // Position offset of reference COP in end link frame (^{l}p_{cop} = R_l^T (p_{cop} - p_l) - ^{l}p_e)
+        hrp::Vector3 localCOPPos = hrp::Vector3::Zero(); // Position offset of reference COP in end link frame (^{l}p_{cop} = R_l^T (p_{cop} - p_l) - ^{l}p_e) // TODO: 初期化と代入
         hrp::Matrix33 localR; // Rotation of ee in end link frame (^{l}R_e = R_l^T R_e)
         // For eefm
         hrp::Vector3 d_foot_pos, ee_d_foot_pos, d_foot_rpy, ee_d_foot_rpy;
@@ -150,7 +171,7 @@ class Stabilizer
         hrp::dvector6 eefm_ee_forcemoment_distribution_weight;
         double swing_support_gain, support_time;
         // For swing ee modification
-        std::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3>> target_ee_diff_p_filter, target_ee_diff_r_filter;
+        std::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3>> target_ee_diff_p_filter, target_ee_diff_r_filter; // TODO: unique?
         hrp::Vector3 target_ee_diff_p, d_pos_swing, d_rpy_swing, prev_d_pos_swing, prev_d_rpy_swing;
         hrp::Matrix33 target_ee_diff_r;
         // IK parameter
@@ -167,9 +188,9 @@ class Stabilizer
     std::mutex m_mutex;
 
     // TODO: 整理
-    unsigned int transition_count;
-    std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
-    std::vector<hrp::JointPathExPtr> jpe_v;
+    int transition_count;
+    // std::map<std::string, hrp::VirtualForceSensorParam> m_vfs;
+    std::vector<std::shared_ptr<hrp::JointPathEx>> jpe_v;
     hrp::dvector transition_joint_q, qorg, qrefv;
     std::vector<STIKParam> stikp;
     std::map<std::string, size_t> contact_states_index_map;
@@ -191,7 +212,7 @@ class Stabilizer
     hrp::Vector3 foot_origin_offset[2];
     std::vector<double> prev_act_force_z;
     double zmp_origin_off, transition_smooth_gain, d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2], root_rot_compensation_limit[2];
-    std::shared_ptr<FirstOrderLowPassFilter<hrp::Vector3> > act_cogvel_filter;
+    std::unique_ptr<FirstOrderLowPassFilter<hrp::Vector3>> act_cogvel_filter;
     OpenHRP::AutoBalancerService::STAlgorithm st_algorithm;
     std::unique_ptr<SimpleZMPDistributor> szd;
     std::vector<std::vector<Eigen::Vector2d> > support_polygon_vetices, margined_support_polygon_vetices;

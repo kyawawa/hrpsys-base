@@ -263,13 +263,17 @@ class AutoBalanceStabilizer
     bool calc_inital_support_legs(const double& y, std::vector<rats::coordinates>& initial_support_legs_coords, std::vector<rats::leg_type>& initial_support_legs, rats::coordinates& start_ref_coords);
     std::string getUseForceModeString ();
 
+    hrp::BodyPtr m_robot;
+    double m_dt;
+    std::mutex m_mutex;
+    unsigned int m_debugLevel;
+
+    std::unique_ptr<Stabilizer> st;
     // for gg
-    std::shared_ptr<rats::gait_generator> gg;
-    std::shared_ptr<Stabilizer> st;
+    std::unique_ptr<rats::gait_generator> gg;
     bool gg_is_walking, gg_solved;
     // for abc
-    using fikPtr = std::shared_ptr<SimpleFullbodyInverseKinematicsSolver>;
-    std::shared_ptr<SimpleFullbodyInverseKinematicsSolver> fik;
+    std::unique_ptr<SimpleFullbodyInverseKinematicsSolver> fik;
     hrp::Vector3 ref_cog, ref_zmp, prev_ref_zmp, prev_imu_sensor_pos, prev_imu_sensor_vel, hand_fix_initial_offset;
     enum {BIPED, TROT, PACE, CRAWL, GALLOP} gait_type;
     enum {MODE_IDLE, MODE_ABC, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_ABC} control_mode;
@@ -282,9 +286,6 @@ class AutoBalanceStabilizer
     rats::coordinates fix_leg_coords, fix_leg_coords2;
     std::vector<hrp::Vector3> default_zmp_offsets;
     std::vector<hrp::Vector3> limb_cop_offsets;
-    double m_dt;
-    hrp::BodyPtr m_robot;
-    std::mutex m_mutex;
     double d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2];
     bool use_limb_stretch_avoidance;
 
@@ -303,7 +304,6 @@ class AutoBalanceStabilizer
     enum {MODE_NO_FORCE, MODE_REF_FORCE, MODE_REF_FORCE_WITH_FOOT, MODE_REF_FORCE_RFU_EXT_MOMENT} use_force;
     std::vector<hrp::Vector3> ref_forces, ref_moments;
 
-    unsigned int m_debugLevel;
     bool is_legged_robot, is_stop_mode, is_hand_fix_mode, is_hand_fix_initial;
     unsigned int loop;
     bool graspless_manip_mode;

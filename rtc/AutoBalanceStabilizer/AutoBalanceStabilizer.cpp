@@ -210,9 +210,9 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
     m_qRef.data.length(m_robot->numJoints());
     m_baseTform.data.length(12);
 
-    fik = std::make_shared<SimpleFullbodyInverseKinematicsSolver>(m_robot, std::string(m_profile.instance_name), m_dt);
+    fik = std::make_unique<SimpleFullbodyInverseKinematicsSolver>(m_robot, std::string(m_profile.instance_name), m_dt);
 
-    st = std::make_shared<Stabilizer>(m_robot, std::string(m_profile.instance_name) + "_ST", m_dt);
+    st = std::make_unique<Stabilizer>(m_robot, std::string(m_profile.instance_name) + "_ST", m_dt);
 
     // setting from conf file
     // rleg,TARGET_LINK,BASE_LINK
@@ -401,7 +401,7 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
                       << stride_bwd_x_limit << "[m]"
                       << std::endl;
 
-            gg = std::make_shared<rats::gait_generator>(m_dt, leg_pos, leg_names,
+            gg = std::make_unique<rats::gait_generator>(m_dt, leg_pos, leg_names,
                                                         stride_fwd_x_limit/*[m]*/, stride_outside_y_limit/*[m]*/, stride_outside_th_limit/*[deg]*/,
                                                         stride_bwd_x_limit/*[m]*/, stride_inside_y_limit/*[m]*/, stride_inside_th_limit/*[deg]*/);
             gg->set_default_zmp_offsets(default_zmp_offsets);

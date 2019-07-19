@@ -92,6 +92,9 @@ AutoBalanceStabilizer::AutoBalanceStabilizer(RTC::Manager* manager)
       m_footOriginActCogOut("footOriginActCog", m_footOriginActCog),
       m_refContactStatesOut("refContactStates", m_refContactStates),
       m_actContactStatesOut("actContactStates", m_actContactStates),
+      m_refCPOut("refCapturePoint", m_refCP),
+      m_actCPOut("actCapturePoint", m_actCP),
+      m_COPInfoOut("COPInfo", m_COPInfo),
 
       m_AutoBalancerServicePort("AutoBalancerService"),
       m_StabilizerServicePort("StabilizerService"),
@@ -162,6 +165,9 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
     addOutPort("footOriginActCog", m_footOriginActCogOut);
     addOutPort("refContactStates", m_refContactStatesOut);
     addOutPort("actContactStates", m_actContactStatesOut);
+    addOutPort("refCapturePoint", m_refCPOut);
+    addOutPort("actCapturePoint", m_actCPOut);
+    addOutPort("COPInfo", m_COPInfoOut);
 
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("abc", "AutoBalancerService", m_abc_service);
@@ -314,9 +320,15 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
 
         m_controlSwingSupportTime.data.length(ee_num);
         m_actContactStates.data.length(ee_num);
+        m_COPInfo.data.length(ee_num * 3);
+
         for (size_t i = 0; i < ee_num; i++) {
             m_controlSwingSupportTime.data[i] = 1.0;
             m_actContactStates.data[i] = false;
+
+            for (size_t j = 0; j < 3; ++j) {
+                m_COPInfo.data[i * 3 + j] = 0.0;
+            }
         }
 
         toe_heel_ratio.resize(ee_num, rats::no_using_toe_heel_ratio);
@@ -768,6 +780,32 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onExecute(RTC::UniqueId ec_id)
         m_diffFootOriginExtMoment.data.y = diff_foot_origin_ext_moment[1];
         m_diffFootOriginExtMoment.data.z = diff_foot_origin_ext_moment[2];
         m_diffFootOriginExtMomentOut.write();
+
+        m_refCP.tm = m_qRef.tm;
+        const hrp::Vector3 rel_ref_cp = st->getOriginRefCP();
+        m_refCP.data.x = rel_ref_cp(0);
+        m_refCP.data.y = rel_ref_cp(1);
+        m_refCP.data.z = rel_ref_cp(2);
+        m_refCPOut.write();
+
+        m_actCP.tm = m_qRef.tm;
+        const hrp::Vector3 rel_act_cp = st->getOriginActCP();
+        m_actCP.data.x = rel_act_cp(0);
+        m_actCP.data.y = rel_act_cp(1);
+        m_actCP.data.z = rel_act_cp(2);
+        m_actCPOut.write();
+
+        {
+            m_COPInfo.tm = m_qRef.tm;
+            const std::vector<hrp::Vector3> contact_cop_info = st->getContactCOPInfo();
+            const size_t contact_size = contact_cop_info.size();
+            for (size_t i = 0; i < contact_size; ++i) {
+                for (size_t j = 0; j < 3; ++j) {
+                    m_COPInfo.data[i * 3 + j] = contact_cop_info[i][j];
+                }
+            }
+            m_COPInfoOut.write();
+        }
     }
 
     {

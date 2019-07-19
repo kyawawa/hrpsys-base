@@ -121,6 +121,9 @@ class Stabilizer
     hrp::Vector3 calcDiffCP() const { return ref_foot_origin_rot * (ref_cp - act_cp - cp_offset); }
     std::vector<bool> getActContactStates() const { return act_contact_states; }
     hrp::Vector3 getDiffFootOriginExtMoment() const { return diff_foot_origin_ext_moment; }
+    std::vector<hrp::Vector3> getContactCOPInfo() const  { return contact_cop_info; }
+    hrp::Vector3 getOriginRefCP() const { return rel_ref_cp; }
+    hrp::Vector3 getOriginActCP() const { return rel_act_cp; }
     std::pair<bool, int> getEmergencySignal() const { return std::make_pair(whether_send_emergency_signal, emergency_signal); }
 
   private:

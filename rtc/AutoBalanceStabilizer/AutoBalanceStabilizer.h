@@ -49,32 +49,6 @@
 using namespace RTC;
 using paramsToStabilizer = paramsFromAutoBalancer;
 
-// // TODO: utility化?
-// RTC::ReturnCode_t loadRobotModel(const hrp::BodyPtr& m_robot, const RTC::Properties& _prop, const CORBA::String_member& instance_name)
-// {
-//     m_robot = hrp::BodyPtr(new hrp::Body()); // TODO: make_shared
-//     RTC::Manager& rtcManager = RpTC::Manager::instance();
-//     std::string nameServer = rtcManager.getConfig()["corba.nameservers"];
-//     int comPos = nameServer.find(",");
-//     if (comPos < 0) {
-//         comPos = nameServer.length();
-//     }
-//     nameServer = nameServer.substr(0, comPos);
-//     RTC::CorbaNaming naming(rtcManager.getORB(), nameServer.c_str());
-//     if (!loadBodyFromModelLoader(m_robot, _prop["model"].c_str(),
-//                                  CosNaming::NamingContext::_duplicate(naming.getRootContext())
-//             )) {
-//         std::cerr << "[" << instance_name
-//                   << "] failed to load model["
-//                   << _prop["model"]
-//                   << "]"
-//                   << std::endl;
-//         return RTC::RTC_ERROR;
-//     }
-
-//     return RTC::RTC_OK;
-// }
-
 class AutoBalanceStabilizer
   : public RTC::DataFlowComponentBase
 {
@@ -220,8 +194,8 @@ class AutoBalanceStabilizer
     OutPort<TimedPoint3D> m_sbpCogOffsetOut;
     std::vector<TimedDoubleSeq> m_force;
     std::vector<OutPort<TimedDoubleSeq> *> m_ref_forceOut;
-    std::vector<TimedPoint3D> m_limbCOPOffset; // TODO: delete
-    std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
+    TimedPoint3D m_diffFootOriginExtMoment;
+    OutPort<TimedPoint3D> m_diffFootOriginExtMomentOut;
     TimedLong m_emergencySignal;
     OutPort<TimedLong> m_emergencySignalOut;
     // for debug

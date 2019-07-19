@@ -29,7 +29,6 @@ set(idl_files
   ReferenceForceUpdaterService.idl
   AccelerationFilterService.idl
   ObjectContactTurnaroundDetectorService.idl
-  AutoBalanceStabilizerService.idl
   PCDLoaderService.idl
   )
 

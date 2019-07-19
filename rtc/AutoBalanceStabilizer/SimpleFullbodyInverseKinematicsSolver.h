@@ -198,14 +198,13 @@ public:
         }
     }
 
-    // TODO: erase AutoBalanceStabilizerService
     // Get IKparam
-    void getIKParam (std::vector<std::string>& ee_vec, _CORBA_Unbounded_Sequence<OpenHRP::AutoBalanceStabilizerService::IKLimbParameters>& ik_limb_parameters)
+    void getIKParam (std::vector<std::string>& ee_vec, _CORBA_Unbounded_Sequence<OpenHRP::AutoBalancerService::IKLimbParameters>& ik_limb_parameters)
     {
         ik_limb_parameters.length(ee_vec.size());
         for (size_t i = 0; i < ee_vec.size(); i++) {
             IKparam& param = ikp[ee_vec[i]];
-            OpenHRP::AutoBalanceStabilizerService::IKLimbParameters& ilp = ik_limb_parameters[i];
+            OpenHRP::AutoBalancerService::IKLimbParameters& ilp = ik_limb_parameters[i];
             ilp.ik_optional_weight_vector.length(param.manip->numJoints());
             std::vector<double> ov;
             ov.resize(param.manip->numJoints());
@@ -220,7 +219,7 @@ public:
         }
     };
     // Set IKparam
-    void setIKParam (std::vector<std::string>& ee_vec, const _CORBA_Unbounded_Sequence<OpenHRP::AutoBalanceStabilizerService::IKLimbParameters>& ik_limb_parameters)
+    void setIKParam (std::vector<std::string>& ee_vec, const _CORBA_Unbounded_Sequence<OpenHRP::AutoBalancerService::IKLimbParameters>& ik_limb_parameters)
     {
         std::cerr << "[" << print_str << "]  IK limb parameters" << std::endl;
         bool is_ik_limb_parameter_valid_length = true;
@@ -235,7 +234,7 @@ public:
             if (is_ik_limb_parameter_valid_length) {
                 for (size_t i = 0; i < ee_vec.size(); i++) {
                     IKparam& param = ikp[ee_vec[i]];
-                    const OpenHRP::AutoBalanceStabilizerService::IKLimbParameters& ilp = ik_limb_parameters[i];
+                    const OpenHRP::AutoBalancerService::IKLimbParameters& ilp = ik_limb_parameters[i];
                     std::vector<double> ov;
                     ov.resize(param.manip->numJoints());
                     for (size_t j = 0; j < param.manip->numJoints(); j++) {

@@ -16,7 +16,7 @@
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
 #include "../TorqueFilter/IIRFilter.h"
-#include "hrpsys/idl/AutoBalanceStabilizerService.hh"
+#include "hrpsys/idl/StabilizerService.hh"
 #include "TwoDofController.h"
 #include "ZMPDistributor.h"
 
@@ -71,11 +71,11 @@ class Stabilizer
     void calcTPCC();
     void calcEEForceMomentControl();
     void calcSwingEEModification ();
-    void getStabilizerParam(OpenHRP::AutoBalanceStabilizerService::StabilizerParam& i_stp);
-    void setStabilizerParam(const OpenHRP::AutoBalanceStabilizerService::StabilizerParam& i_stp);
-    void setBoolSequenceParam (std::vector<bool>& st_bool_values, const OpenHRP::AutoBalanceStabilizerService::BoolSequence& output_bool_values, const std::string& prop_name);
-    void setBoolSequenceParamWithCheckContact (std::vector<bool>& st_bool_values, const OpenHRP::AutoBalanceStabilizerService::BoolSequence& output_bool_values, const std::string& prop_name);
-    std::string getStabilizerAlgorithmString (OpenHRP::AutoBalanceStabilizerService::STAlgorithm _st_algorithm);
+    void getStabilizerParam(OpenHRP::StabilizerService::stParam& i_stp);
+    void setStabilizerParam(const OpenHRP::StabilizerService::stParam& i_stp);
+    void setBoolSequenceParam (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name);
+    void setBoolSequenceParamWithCheckContact (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name);
+    std::string getStabilizerAlgorithmString (OpenHRP::StabilizerService::STAlgorithm _st_algorithm);
     void waitSTTransition();
     // funcitons for calc final torque output
     void calcContactMatrix (hrp::dmatrix& tm, const std::vector<hrp::Vector3>& contact_p);
@@ -217,7 +217,7 @@ class Stabilizer
     std::vector<double> prev_act_force_z;
     double zmp_origin_off, transition_smooth_gain, d_pos_z_root, limb_stretch_avoidance_time_const, limb_stretch_avoidance_vlimit[2], root_rot_compensation_limit[2];
     std::unique_ptr<FirstOrderLowPassFilter<hrp::Vector3>> act_cogvel_filter;
-    OpenHRP::AutoBalanceStabilizerService::STAlgorithm st_algorithm;
+    OpenHRP::StabilizerService::STAlgorithm st_algorithm;
     std::unique_ptr<SimpleZMPDistributor> szd;
     std::vector<std::vector<Eigen::Vector2d> > support_polygon_vetices, margined_support_polygon_vetices;
     std::vector<hrp::Vector3> contact_cop_info;
@@ -254,7 +254,7 @@ class Stabilizer
     bool reset_emergency_flag;
     bool whether_send_emergency_signal; // temporary variable to send emergency signal
     int emergency_signal;
-    OpenHRP::AutoBalanceStabilizerService::EmergencyCheckMode emergency_check_mode;
+    OpenHRP::StabilizerService::EmergencyCheckMode emergency_check_mode;
 };
 
 #endif // ABS_STABILIZER_H

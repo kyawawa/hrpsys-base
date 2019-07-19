@@ -5,7 +5,10 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
-set(comp_sources AutoBalanceStabilizer.cpp AutoBalanceStabilizerService_impl.cpp ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../SequencePlayer/interpolator.cpp PreviewController.cpp GaitGenerator.cpp SimpleFullbodyInverseKinematicsSolver.h ../TorqueFilter/IIRFilter.cpp)
+set(comp_sources
+  AutoBalanceStabilizer.cpp AutoBalancerService_impl.cpp StabilizerService_impl.cpp
+  ../ImpedanceController/JointPathEx.cpp ../ImpedanceController/RatsMatrix.cpp ../SequencePlayer/interpolator.cpp ../TorqueFilter/IIRFilter.cpp
+  PreviewController.cpp GaitGenerator.cpp)
 set(libs hrpModel-3.1 hrpCollision-3.1 hrpUtil-3.1 hrpsysBaseStub)
 
 include_directories(${PROJECT_SOURCE_DIR}/rtc/SequencePlayer)

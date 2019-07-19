@@ -635,12 +635,23 @@ class HrpsysConfigurator(object):
         print(self.configurator_name + "create Comp -> %s : %s (%s)" % (compName, comp, version))
         if comp == None:
             raise RuntimeError("Cannot create component: " + compName)
-        if comp.service("service0"):
-            comp_svc = narrow(comp.service("service0"), compName + "Service")
-            print(self.configurator_name + "create CompSvc -> %s Service : %s" % (compName, comp_svc))
-            return [comp, comp_svc, version]
-        else:
-            return [comp, None, version]
+
+        return [comp, version]
+
+    def findService(self, comp, serviceName, serviceInstance="service0", verbose=True):
+        '''!@brief
+        Find service port
+
+        @param comp    RTcomponent: RTcomponent instance
+        @param serviceName     str: service name
+        @param serviceInstance str: instance name
+        '''
+        comp_svc = None
+        if comp.service(serviceInstance):
+            comp_svc = narrow(comp.service(serviceInstance), serviceName + "Service")
+            if verbose:
+                print(self.configurator_name + "find CompSvc -> %s Service : %s" % (serviceName, comp_svc))
+        return comp_svc
 
     def createComps(self):
         '''!@brief
@@ -648,11 +659,20 @@ class HrpsysConfigurator(object):
         '''
         for rn in self.getRTCList():
             try:
-                rn2 = 'self.' + rn[0]
-                if eval(rn2) == None:
-                    create_str = "[self." + rn[0] + ", self." + rn[0] + "_svc, self." + rn[0] + "_version] = self.createComp(\"" + rn[1] + "\",\"" + rn[0] + "\")"
-                    print(self.configurator_name + "  eval : " + create_str)
-                    exec(create_str)
+                if eval('self.' + rn[0]) == None:
+                    [comp, version] = self.createComp(rn[1], rn[0])
+                    exec("self." + rn[0] + " = comp")
+                    exec("self." + rn[0] + "_version = version")
+
+                    if len(rn) == 2:
+                        service = self.findService(comp, rn[1], "service0")
+                        exec("self." + rn[0] + "_svc = service")
+                    else:
+                        for service_list in rn[2]:
+                            service = self.findService(comp, service_list[1], service_list[0])
+                            print("self." + service_list[0] + "_svc = %s" % service)
+                            exec("self." + service_list[0] + "_svc = service")
+
             except Exception:
                 _, e, _ = sys.exc_info()
                 print(self.configurator_name + '\033[31mFail to createComps ' + str(e) + '\033[0m')
@@ -709,18 +729,9 @@ class HrpsysConfigurator(object):
             version = comp.ref.get_component_profile().version
         if verbose:
             print(self.configurator_name + " find Comp    : %s = %s (%s)" % (instanceName, comp, version))
-        if comp == None:
-            if verbose:
+            if comp == None:
                 print(self.configurator_name + " Cannot find component: %s (%s)" % (instanceName, compName))
-            return [None, None, None]
-        comp_svc_port = comp.service("service0")
-        if comp_svc_port:
-            comp_svc = narrow(comp_svc_port, compName + "Service")
-            if verbose:
-                print(self.configurator_name + " find CompSvc : %s_svc = %s"%(instanceName, comp_svc))
-            return [comp, comp_svc, version]
-        else:
-            return [comp, None, version]
+        return [comp, version]
 
     def findComps(self, max_timeout_count = 10, verbose=True):
         '''!@brief
@@ -729,12 +740,28 @@ class HrpsysConfigurator(object):
         for rn in self.getRTCList():
             rn2 = 'self.' + rn[0]
             if eval(rn2) == None:
-                create_str = "[self." + rn[0] + ", self." + rn[0] + "_svc, self." + rn[0] + "_version] = self.findComp(\"" + rn[1] + "\",\"" + rn[0] + "\"," + str(max_timeout_count) + "," + str(verbose) + ")"
+                [comp, version] = self.findComp(rn[1], rn[0], max_timeout_count)
+                exec("self." + rn[0] + " = comp")
+                exec("self." + rn[0] + "_version = version")
                 if verbose:
-                    print(self.configurator_name + create_str)
-                exec(create_str)
-                if eval(rn2) == None:
+                    print("self." + rn[0] + " = %s" % comp)
+                    print("self." + rn[0] + "_version = %s" % version)
+
+                if not comp:
                     max_timeout_count = 0
+                    continue
+
+                if len(rn) == 2:
+                    service = self.findService(comp, rn[1], "service0")
+                    if verbose:
+                        print("self." + rn[0] + "_svc = %s" % service)
+                    exec("self." + rn[0] + "_svc = service")
+                else:
+                    for service_list in rn[2]:
+                        service = self.findService(comp, service_list[1], service_list[0])
+                        if verbose:
+                            print("self." + service_list[0] + "_svc = %s" % service)
+                        exec("self." + service_list[0] + "_svc = service")
 
     # public method to configure all RTCs to be activated on rtcd
     def getRTCList(self):
@@ -784,7 +811,7 @@ class HrpsysConfigurator(object):
             ['ic', "ImpedanceController"],
             ['abc', "AutoBalancer"],
             ['st', "Stabilizer"],
-            ['abst', "AutoBalanceStabilizer"],
+            ['abst', "AutoBalanceStabilizer", [["abc", "AutoBalancer"], ["st", "Stabilizer"]]],
             ['co', "CollisionDetector"],
             ['tc', "TorqueController"],
             ['te', "ThermoEstimator"],

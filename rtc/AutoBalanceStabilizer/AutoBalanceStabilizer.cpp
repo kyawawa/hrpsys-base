@@ -612,6 +612,19 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onExecute(RTC::UniqueId ec_id)
 
     fik->storeCurrentParameters();
 
+    hrp::Vector3 kf_acc_ref;
+    {
+        const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+        if (sen != NULL) {
+            const hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
+            const hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos) / m_dt;
+            // convert to imu sensor local acceleration
+            kf_acc_ref = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel) / m_dt;
+            prev_imu_sensor_pos = imu_sensor_pos;
+            prev_imu_sensor_vel = imu_sensor_vel;
+        }
+    }
+
     // Stabilizer
     hrp::dvector abc_qref(m_robot->numJoints()); // TODO: IKなしで大丈夫なのか，必要なのか
     copyJointAnglesFromRobotModel(abc_qref, m_robot);
@@ -705,21 +718,10 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onExecute(RTC::UniqueId ec_id)
         m_sbpCogOffset.data.z = sbp_cog_offset(2);
         m_sbpCogOffsetOut.write();
 
-        // reference acceleration
-        const hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-        if (sen != NULL) {
-            const hrp::Vector3 imu_sensor_pos = sen->link->p + sen->link->R * sen->localPos;
-            const hrp::Vector3 imu_sensor_vel = (imu_sensor_pos - prev_imu_sensor_pos) / m_dt;
-            // convert to imu sensor local acceleration
-            const hrp::Vector3 acc = (sen->link->R * sen->localR).transpose() * (imu_sensor_vel - prev_imu_sensor_vel) / m_dt;
-            prev_imu_sensor_pos = imu_sensor_pos;
-            prev_imu_sensor_vel = imu_sensor_vel;
-
-            m_accRef.data.ax = acc(0);
-            m_accRef.data.ay = acc(1);
-            m_accRef.data.az = acc(2);
-            m_accRefOut.write();
-        }
+        m_accRef.data.ax = kf_acc_ref(0);
+        m_accRef.data.ay = kf_acc_ref(1);
+        m_accRef.data.az = kf_acc_ref(2);
+        m_accRefOut.write();
 
         // control parameters
         m_refContactStates.tm = m_qRef.tm;

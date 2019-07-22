@@ -502,7 +502,6 @@ void Stabilizer::calcActualParameters(const paramsFromSensors& sensor_param)
         new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
         for (size_t i = 0; i < 2; i++) {
             new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
-            // std::cerr << comp_name << " " << i << " ref_cog: " << ref_cog(i) << " ref_cogvel: " << ref_cogvel(i) << " act_cog: " << act_cog(i) << " act_cogvel: " << act_cogvel(i) << " ref_zmp: " << ref_zmp(i) << " act_zmp: " << act_zmp(i) << " dcog: " << dcog(i) << " dcogvel: " << dcogvel(i) << " dzmp: " << dzmp(i) << std::endl; // Debug
         }
 
         if (DEBUGP(loop)) {

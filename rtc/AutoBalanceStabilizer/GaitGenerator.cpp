@@ -100,8 +100,7 @@ void GaitGenerator::forwardTimeStep(const size_t cur_count)
         if (goal_idx == constraints_list.size()) continue;
 
         const ConstraintsWithCount goal_cwc = constraints_list[goal_idx];
-        Eigen::Isometry3d target_coord = goal_cwc.constraints[idx].targetCoord();
-        target_coord = target_coord * goal_cwc.constraints[idx].localCoord().inverse() * cur_const.localCoord(); // TODO: 確認
+        const Eigen::Isometry3d target_coord = goal_cwc.constraints[idx].targetCoord() * goal_cwc.constraints[idx].localCoord().inverse() * cur_const.localCoord(); // TODO: 確認
 
         if (cur_const.getConstraintType() == LinkConstraint::FLOAT) {
             cur_const.calcLimbViaPoints(default_traj_type,
@@ -169,7 +168,7 @@ void GaitGenerator::modifyConstraintsTarget(const size_t cur_count,
     if (constraints_list[cur_const_idx].constraints[modif_const_idx].getConstraintType() > LinkConstraint::ROTATE) {
         // TODO: regenerate
         const LinkConstraint& landing_constraint = constraints_list[modif_cwc_idx].constraints[modif_const_idx];
-        Eigen::Isometry3d target_coord = landing_constraint.targetCoord() * landing_constraint.localCoord().inverse() * constraints_list[cur_const_idx].constraints[modif_const_idx].localCoord(); // TODO: forwardTimeStepにも同じのがある．関数化
+        const Eigen::Isometry3d target_coord = landing_constraint.targetCoord() * landing_constraint.localCoord().inverse() * constraints_list[cur_const_idx].constraints[modif_const_idx].localCoord(); // TODO: forwardTimeStepにも同じのがある．関数化
 
         constraints_list[cur_const_idx].constraints[modif_const_idx]
             .modifyLimbViaPoints(target_coord,

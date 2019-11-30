@@ -19,6 +19,9 @@ add_library(EigenUtil SHARED EigenUtil.cpp)
 
 add_library(LinkConstraint SHARED LinkConstraint.cpp LimbTrajectoryGenerator.cpp)
 
+add_library(StateEstimator SHARED StateEstimator.cpp)
+target_link_libraries(StateEstimator PRIVATE ${libs} LinkConstraint)
+
 add_library(GaitGenerator SHARED GaitGenerator.cpp RefZMPGenerator.cpp LimbTrajectoryGenerator.cpp COGTrajectoryGenerator.cpp)
 target_link_libraries(GaitGenerator PRIVATE ${libs} LinkConstraint)
 

@@ -19,7 +19,8 @@ namespace hrp {
 class COGTrajectoryGenerator
 {
   public:
-    enum CogCalculationType : size_t { PREVIEW_CONTROL};
+    enum LocomotionMode : size_t { WALK, RUN };
+    enum CogCalculationType : size_t { PREVIEW_CONTROL, FOOT_GUIDED };
 
   private:
     hrp::Vector3 cog     = hrp::Vector3::Zero();
@@ -48,6 +49,13 @@ class COGTrajectoryGenerator
 
     void setCogCalculationType(CogCalculationType type) { calculation_type = type; }
     void initPreviewController(const double dt, const hrp::Vector3& cur_ref_zmp);
+    void calcCogFromLandingPoints(const hrp::Vector3& support_point,
+                                  const hrp::Vector3& landing_points,
+                                  const double dt,
+                                  const double start_time,
+                                  const double supporting_time,
+                                  const double landing_times,
+                                  const double cur_time);
     void calcCogFromZMP(const std::deque<hrp::Vector3>& refzmp_list);
 };
 

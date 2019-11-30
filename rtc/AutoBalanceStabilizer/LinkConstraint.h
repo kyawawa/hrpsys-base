@@ -22,8 +22,6 @@
 
 namespace hrp {
 
-// class LimbTrajectoryGenerator;
-
 class LinkConstraint
 {
   public:
@@ -41,6 +39,7 @@ class LinkConstraint
     double rot_acc = 0;
 
     // TODO: sensorやref forceなど入れる？
+    bool is_zmp_calc_target = true;
     hrp::Vector3 cop_offset = hrp::Vector3::Zero(); // Link local
     double cop_weight = 1.0; // TODO: FLOATではweightを0に?
     ConstraintType constraint_type = FIX;
@@ -103,6 +102,8 @@ class LinkConstraint
 
     Eigen::Isometry3d::LinearPart targetRot() { return target_coord.linear(); }
     Eigen::Isometry3d::ConstLinearPart targetRot() const { return target_coord.linear(); }
+
+    bool isZmpCalcTarget() const { return is_zmp_calc_target; }
 
     void setCOPWeight(double _weight) { cop_weight = _weight; }
     double getCOPWeight() const { return cop_weight; }

@@ -21,6 +21,8 @@
 #include "Utility.h"
 #include "ZMPDistributor.h"
 
+namespace hrp {
+
 struct paramsFromAutoBalancer
 {
     hrp::dvector q_ref;
@@ -280,4 +282,5 @@ class Stabilizer
     OpenHRP::AutoBalanceStabilizerService::EmergencyCheckMode emergency_check_mode = OpenHRP::AutoBalanceStabilizerService::NO_CHECK;
 };
 
+}
 #endif // ABS_STABILIZER_H

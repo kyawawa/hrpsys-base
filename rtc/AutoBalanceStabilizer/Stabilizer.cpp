@@ -26,6 +26,8 @@ constexpr unsigned int DEBUG_LEVEL = 0;
 inline bool DEBUGP(unsigned int loop) { return (DEBUG_LEVEL == 1 && loop % 200 == 0) || DEBUG_LEVEL > 1; }
 }
 
+namespace hrp {
+
 Stabilizer::Stabilizer(const hrp::BodyPtr& _robot, const std::string& _comp_name, const double _dt)
     : //m_robot(boost::make_shared<hrp::Body>(*_robot)), // TODO: copy constructor
       m_robot(_robot),
@@ -449,6 +451,8 @@ void Stabilizer::calcActualParameters(const paramsFromSensors& sensor_param)
         for (size_t i = 0; i < 2; i++) {
             new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
         }
+
+        // std::cerr << "act_cogvel = " << hrp::Vector3(act_cogvel*1e3).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << std::endl;
 
         if (DEBUGP(loop)) {
             // All state variables are foot_origin coords relative
@@ -1978,4 +1982,6 @@ void Stabilizer::setStabilizerParam(const OpenHRP::AutoBalanceStabilizerService:
         }
         std::cerr << "]" << std::endl;
     }
+}
+
 }

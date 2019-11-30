@@ -46,7 +46,6 @@
 // </rtc-template>
 
 using namespace RTC;
-using paramsToStabilizer = paramsFromAutoBalancer;
 
 class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
 {
@@ -217,6 +216,7 @@ class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
 
   private:
     hrp::BodyPtr m_robot = boost::make_shared<hrp::Body>();
+    hrp::BodyPtr m_act_robot;
     std::mutex m_mutex;
     double m_dt;
     unsigned int m_debugLevel = 0;
@@ -232,11 +232,10 @@ class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
     std::unique_ptr<hrp::FullbodyInverseKinematicsSolver> fik;
 
     inline bool DEBUGP() { return (m_debugLevel == 1 && loop % 200 == 0) || m_debugLevel > 1; }
-
-    inline bool loadModel(hrp::BodyPtr body, const string& model_path);
+    bool loadModel(hrp::BodyPtr body, const string& model_path);
 
     // -- Functions for OpenRTM port --
-    inline void setupBasicPort();
+    void setupBasicPort();
     inline void readInportData();
     inline void writeOutPortData(const hrp::Vector3& base_pos,
                                  const hrp::Matrix33& base_rot,
@@ -245,12 +244,14 @@ class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
                                  const hrp::Vector3& ref_cog,
                                  const hrp::Vector3& sbp_cog_offset,
                                  const hrp::Vector3& acc_ref,
-                                 const stabilizerLogData& st_log_data);
+                                 const hrp::stabilizerLogData& st_log_data);
     // -- Functions for OpenRTM port --
 
+    void updateBodyParams();
     std::vector<hrp::LinkConstraint> readContactPointsFromProps(const RTC::Properties& prop);
-    void addBodyConstraint(std::vector<hrp::LinkConstraint>& constraints,
-                           const hrp::BodyPtr& _robot);
+
+    // void addBodyConstraint(std::vector<hrp::LinkConstraint>& constraints,
+    //                        const hrp::BodyPtr& _robot);
     void setupIKConstraints(const hrp::BodyPtr& _robot,
                             const std::vector<hrp::LinkConstraint>& constraints);
     void setIKConstraintsTarget();
@@ -277,14 +278,7 @@ class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
     void startABCparam(const ::OpenHRP::AutoBalanceStabilizerService::StrSequence& limbs);
     void stopABCparam();
     void waitABCTransition();
-    // Functions to calculate parameters for ABC output.
-    // Output parameters are EE, limbCOPOffset, contactStates, controlSwingSupportTime, toeheelPhaseRation
-    void interpolateLegNamesAndZMPOffsets();
-    // void updateTargetCoordsForHandFixMode (rats::coordinates& tmp_fix_coords);
-    void calculateOutputRefForces ();
-    hrp::Matrix33 OrientRotationMatrix (const hrp::Matrix33& rot, const hrp::Vector3& axis1, const hrp::Vector3& axis2);
-    // void fixLegToCoords (const hrp::Vector3& fix_pos, const hrp::Matrix33& fix_rot);
-    // void fixLegToCoords2 (rats::coordinates& tmp_fix_coords);
+
     bool startWalking ();
     void stopWalking ();
     // static balance point offsetting
@@ -314,7 +308,7 @@ class AutoBalanceStabilizer : public RTC::DataFlowComponentBase
     hrp::Vector3 ref_foot_origin_ext_moment;
     bool is_ref_foot_origin_ext_moment_hold_value;
 
-    std::unique_ptr<Stabilizer> st;
+    std::unique_ptr<hrp::Stabilizer> st;
 
     // for gg
     std::unique_ptr<hrp::GaitGenerator> gg;

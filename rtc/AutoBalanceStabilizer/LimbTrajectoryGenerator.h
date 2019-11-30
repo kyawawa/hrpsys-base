@@ -11,7 +11,6 @@
 
 #include <vector>
 #include <hrpUtil/EigenTypes.h>
-// #include "LinkConstraint.h"
 
 namespace hrp {
 

@@ -14,6 +14,7 @@
 #include "AutoBalanceStabilizer.h"
 
 using Guard = std::lock_guard<std::mutex>;
+using paramsToStabilizer = hrp::paramsFromAutoBalancer;
 // Utility functions
 using hrp::deg2rad;
 using hrp::rad2deg;
@@ -121,7 +122,7 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
     }
 
     fik = std::make_unique<hrp::FullbodyInverseKinematicsSolver>(m_robot, std::string(m_profile.instance_name), m_dt);
-    st = std::make_unique<Stabilizer>(m_robot, std::string(m_profile.instance_name) + "_ST", m_dt);
+    st = std::make_unique<hrp::Stabilizer>(m_robot, std::string(m_profile.instance_name) + "_ST", m_dt);
     {
         std::vector<hrp::LinkConstraint> init_constraints = readContactPointsFromProps(prop);
 
@@ -259,11 +260,13 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
 
     m_accRef.data.ax = m_accRef.data.ay = m_accRef.data.az = 0.0;
 
-    const hrp::Sensor* gyro = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-    if (!gyro) {
-        std::cerr << "[" << m_profile.instance_name
-                  << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
-                  << std::endl;
+    {
+        const hrp::Sensor* const gyro = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+        if (!gyro) {
+            std::cerr << "[" << m_profile.instance_name
+                      << "] WARNING! This robot model has no GyroSensor named 'gyrometer'! "
+                      << std::endl;
+        }
     }
 
     // allocate memory
@@ -289,6 +292,8 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onInitialize()
 
     additional_force_applied_link = m_robot->rootLink();
     additional_force_applied_point_offset = hrp::Vector3::Zero();
+
+    m_act_robot = boost::make_shared<hrp::Body>(*m_robot);
     return RTC::RTC_OK;
 }
 
@@ -324,12 +329,7 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onExecute(RTC::UniqueId ec_id)
     ++loop;
     gg->setCurrentLoop(loop);
     readInportData();
-
-    // - 現在状態計算
-    copyJointAnglesToRobotModel(m_robot, q_ref);
-    m_robot->rootLink()->p = ref_base_pos;
-    m_robot->rootLink()->R = ref_base_rot;
-    m_robot->calcForwardKinematics();
+    updateBodyParams();
 
     if (control_mode != MODE_IDLE) {
         adjustCOPCoordToTarget();
@@ -443,7 +443,7 @@ RTC::ReturnCode_t AutoBalanceStabilizer::onExecute(RTC::UniqueId ec_id)
                                           hrp::rpyFromRot(ref_baseRot), gg_is_walking, ref_contact_states, // toe_heel_ratio,
                                           control_swing_support_time, ref_wrenches_for_st, // limb_cop_offsets,
                                           sbp_cog_offset},
-                       paramsFromSensors{q_act, act_rpy, act_wrenches});
+                       hrp::paramsFromSensors{q_act, act_rpy, act_wrenches});
 
     writeOutPortData(ref_basePos, ref_baseRot, ref_zmp, ref_zmp_base_frame,
                      gg->getCog(), sbp_cog_offset, kf_acc_ref, st->getStabilizerLogData());
@@ -569,12 +569,22 @@ void AutoBalanceStabilizer::readInportData()
             for (size_t j = 0; j < 6; ++j) {
                 ref_wrenches[i][j] = m_ref_force[i].data[j];
             }
+            hrp::ForceSensor* sensor = m_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
+            for (size_t j = 0; j < 3; ++j) {
+                sensor->f[j]   = m_ref_force[i].data[j];
+                sensor->tau[j] = m_ref_force[i].data[j + 3];
+            }
         }
 
         if (m_wrenchesIn[i]->isNew()) {
             m_wrenchesIn[i]->read();
             for (size_t j = 0; j < 6; ++j) {
                 act_wrenches[i][j] = m_wrenches[i].data[j];
+            }
+            hrp::ForceSensor* sensor = m_act_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
+            for (size_t j = 0; j < 3; ++j) {
+                sensor->f[j]   = m_wrenches[i].data[j];
+                sensor->tau[j] = m_wrenches[i].data[j + 3];
             }
         }
     }
@@ -601,7 +611,7 @@ void AutoBalanceStabilizer::writeOutPortData(const hrp::Vector3& base_pos,
                                              const hrp::Vector3& ref_cog,
                                              const hrp::Vector3& sbp_cog_offset,
                                              const hrp::Vector3& acc_ref,
-                                             const stabilizerLogData& st_log_data)
+                                             const hrp::stabilizerLogData& st_log_data)
 {
     const unsigned int qRef_length = m_qRef.data.length();
     for (unsigned int i = 0; i < qRef_length; i++) {
@@ -761,6 +771,21 @@ void AutoBalanceStabilizer::writeOutPortData(const hrp::Vector3& base_pos,
         }
         m_COPInfoOut.write();
     }
+}
+
+void AutoBalanceStabilizer::updateBodyParams()
+{
+    copyJointAnglesToRobotModel(m_robot, q_ref);
+    m_robot->rootLink()->p = ref_base_pos;
+    m_robot->rootLink()->R = ref_base_rot;
+    m_robot->calcForwardKinematics();
+
+    copyJointAnglesToRobotModel(m_act_robot, q_act);
+    const hrp::Sensor* const gyro = m_act_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+    const hrp::Matrix33 gyro_R = gyro->link->R * gyro->localR;
+    m_act_robot->rootLink()->p = ref_base_pos;
+    m_act_robot->rootLink()->R = hrp::rotFromRpy(act_rpy) * (gyro_R.transpose() * m_act_robot->rootLink()->R);
+    m_act_robot->calcForwardKinematics();
 }
 
 std::vector<hrp::LinkConstraint> AutoBalanceStabilizer::readContactPointsFromProps(const RTC::Properties& prop)
@@ -1043,7 +1068,7 @@ bool AutoBalanceStabilizer::goPos(const double x, const double y, const double t
     if (!gg->goPos(target, support_link_cycle, swing_link_cycle)) return false;
 
     Guard guard(m_mutex);
-    gg_is_walking = true;
+    gg_is_walking = true; // TODO: 自動でgg_is_walkingをfalseにする & constraintsのclear
 
     return true;
 }

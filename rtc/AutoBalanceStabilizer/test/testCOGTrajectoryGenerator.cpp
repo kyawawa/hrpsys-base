@@ -86,11 +86,14 @@ void testFootGuidedRunning()
     std::vector<size_t> supporting_counts;
 
     const hrp::Vector3 _init_cog = hrp::Vector3(0, 0.1, 0.8); // Start from left kicking
-    hrp::Vector3 one_step(0.3, -0.2, 0.0);
+    // hrp::Vector3 one_step(0.3, -0.2, 0.0);
+    hrp::Vector3 one_step(0.525, -0.2, 0.0);
 
     // 0.5[s] for one step, including supporting time 0.2[s]
-    constexpr double step_time = 1.0;
-    constexpr double support_time = 0.7;
+    // constexpr double step_time = 1.0;
+    // constexpr double support_time = 0.7;
+    constexpr double step_time = 0.235 + 0.080;
+    constexpr double support_time = 0.235;
     constexpr size_t step_count = static_cast<size_t>(std::round(step_time / dt));
     constexpr size_t support_count = static_cast<size_t>(std::round(support_time / dt));
 
@@ -134,8 +137,8 @@ void testFootGuidedRunning()
 
         constexpr double g_acc = 9.80665;
         constexpr double omega = std::sqrt(g_acc / 0.8);
-        // cog_list[i] = cog_traj_gen.getCog() + cog_traj_gen.getCogVel() / omega; // CP
-        cog_list[i]    = cog_traj_gen.getCog();
+        cog_list[i] = cog_traj_gen.getCog() + cog_traj_gen.getCogVel() / omega; // CP
+        // cog_list[i]    = cog_traj_gen.getCog();
         cogvel_list[i] = cog_traj_gen.getCogVel();
         cogacc_list[i] = cog_traj_gen.getCogAcc();
         time_list[i]   = cur_time;

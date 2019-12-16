@@ -28,6 +28,7 @@ void COGTrajectoryGenerator::calcCogFromZMP(const std::deque<hrp::Vector3>& refz
 
 void COGTrajectoryGenerator::calcCogFromLandingPoints(const hrp::Vector3& support_point,
                                                       const hrp::Vector3& landing_point,
+                                                      const hrp::Vector3& target_cp_offset,
                                                       const double dt,
                                                       const double start_time,
                                                       const double supporting_time,
@@ -39,6 +40,7 @@ void COGTrajectoryGenerator::calcCogFromLandingPoints(const hrp::Vector3& suppor
     const double take_off_z_vel = std::sqrt(2 * g_acc * height);
     double flight_time = 2 * take_off_z_vel / g_acc;
 
+    const hrp::Vector3 target_cp = landing_point + target_cp_offset;
     const double cog_height = 0.8;
     const double omega = std::sqrt(g_acc / cog_height);
     const double rel_cur_time = cur_time - start_time;
@@ -230,7 +232,7 @@ void COGTrajectoryGenerator::calcCogFromLandingPoints(const hrp::Vector3& suppor
             const auto A_lu = A.partialPivLu();
             for (size_t i = 0; i < 2; ++i) {
                 Eigen::Matrix<double, 6, 1> B;
-                B << support_point[i] + start_zmp_offset[i], support_point[i] + end_zmp_offset[i], support_point[i], landing_point[i] - (support_point[i] + end_zmp_offset[i]), 0, 0;
+                B << support_point[i] + start_zmp_offset[i], support_point[i] + end_zmp_offset[i], support_point[i], target_cp[i] - (support_point[i] + end_zmp_offset[i]), 0, 0;
                 const Eigen::Matrix<double, 6, 1> ans = A_lu.solve(B);
 
                 a_var[i] = ans[0];
@@ -238,13 +240,20 @@ void COGTrajectoryGenerator::calcCogFromLandingPoints(const hrp::Vector3& suppor
                 c_var[i] = ans[2];
                 d_var[i] = ans[3];
             }
+            // before: a: 0.11991, b: 1.337, c: 0.535278, d: 6.2
+            // std::cerr << "a: " << a_var[0] << ", b: " << b_var[0] << ", c: " << c_var[0] << ", d: " << d_var[0] << std::endl;
         }
 
-        const auto calcA = [&](const double t) { return d_var + (t + 1 / omega) * c_var + (t * t + 2 * t / omega + 2 / omega2) * b_var + (t + t + t + 3 * t * t / omega + 6 * t / omega2 + 6 / omega3) * a_var; };
-        const hrp::Vector3 B_tau = c_var + 2 * b_var * (rel_cur_time + 1 / omega) + 3 * a_var * (rel_cur_time * rel_cur_time + 2 * rel_cur_time / omega + 2 / omega2);
+        const auto calcA = [&](const double t) { return d_var + (t + 1 / omega) * c_var + (t * t + 2 * t / omega + 2 / omega2) * b_var + (t * t * t + 3 * t * t / omega + 6 * t / omega2 + 6 / omega3) * a_var; };
+        const hrp::Vector3 B_tau = c_var + 2 * b_var * (tau + 1 / omega) + 3 * a_var * (tau * tau + 2 * tau / omega + 2 / omega2);
 
-        c_1 = (cp - calcA(rel_cur_time) - (landing_point - (calcA(tau) + B_tau * flight_time)) / (omega_T + 1) * std::exp(-omega * (tau- rel_cur_time))) / (-(omega * tau * flight_time + flight_time + tau) / (omega_T + 1) * omega3 * std::exp(omega * rel_cur_time) - (omega2 * flight_time * flight_time + omega * flight_time - 2) / (2 * flight_time * (omega_T + 1)) * std::exp(omega * (2 * rel_land_time - 2 * tau + rel_cur_time)) + omega3 * rel_cur_time * std::exp(omega * rel_cur_time) - (omega2 * flight_time + 2 * omega) / (2 * flight_time) * std::exp(omega * (2 * rel_land_time - rel_cur_time)));
+        c_1 = (cp - calcA(rel_cur_time) - (target_cp - (calcA(tau) + B_tau * flight_time)) / (omega_T + 1) * std::exp(-omega * (tau - rel_cur_time))) / (-(omega * tau * flight_time + flight_time + tau) / (omega_T + 1) * omega3 * std::exp(omega * rel_cur_time) - (omega2 * flight_time * flight_time + omega * flight_time - 2) / (2 * flight_time * (omega_T + 1)) * std::exp(omega * (2 * rel_land_time - 2 * tau + rel_cur_time)) + omega3 * rel_cur_time * std::exp(omega * rel_cur_time) - (omega2 * flight_time + 2 * omega) / (2 * flight_time) * std::exp(omega * (2 * rel_land_time - rel_cur_time)));
 
+        // const hrp::Vector3 A = d_var + (rel_cur_time + 1 / omega) * c_var + (rel_cur_time * rel_cur_time + 2 * rel_cur_time / omega + 2 / (omega * omega)) * b_var + (rel_cur_time * rel_cur_time * rel_cur_time + 3 * rel_cur_time * rel_cur_time / omega + 6 * rel_cur_time / (omega * omega) + 6 / (omega * omega * omega)) * a_var;
+        // const hrp::Vector3 B = d_var + (flight_time + supporting_time + 1 / omega) * c_var + (supporting_time * supporting_time + 2 * supporting_time / omega + 2 * supporting_time * flight_time + 2 * flight_time / omega + 2 / (omega * omega)) * b_var + 3 * (supporting_time * supporting_time * supporting_time / 3.0 + supporting_time * supporting_time * flight_time + (supporting_time * supporting_time + 2 * supporting_time * flight_time) / omega + (2 * supporting_time + 2 * flight_time) / (omega * omega) + 2 / (omega * omega * omega)) * a_var;
+        // const hrp::Vector3 c_1_1 = (cp - A - (target_cp - B) / (omega_T + 1) * std::exp(-omega * (supporting_time - rel_cur_time))) / (-(omega * supporting_time * flight_time + flight_time + supporting_time) / (omega_T + 1) * omega * omega * omega * std::exp(omega * rel_cur_time) - (omega * omega * flight_time * flight_time + omega * flight_time - 2) / (2 * flight_time * (omega_T + 1)) * std::exp(omega * (2 * rel_land_time - 2 * supporting_time + rel_cur_time)) + omega * omega * omega * rel_cur_time * std::exp(omega * rel_cur_time) - (omega * omega * flight_time + 2 * omega) / (2 * flight_time) * std::exp(omega * (2 * rel_land_time - rel_cur_time)));
+
+        // std::cerr << (calcA(rel_cur_time) - A).transpose() << ", " << (c_1 - c_1_1).transpose() << std::endl;
         ref_zmp = a_var * rel_cur_time * rel_cur_time * rel_cur_time + b_var * rel_cur_time * rel_cur_time + c_var * rel_cur_time + d_var;
     }
 

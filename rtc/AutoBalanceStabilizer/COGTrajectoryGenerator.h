@@ -51,6 +51,7 @@ class COGTrajectoryGenerator
     void initPreviewController(const double dt, const hrp::Vector3& cur_ref_zmp);
     void calcCogFromLandingPoints(const hrp::Vector3& support_point,
                                   const hrp::Vector3& landing_points,
+                                  const hrp::Vector3& target_cp_offset,
                                   const double dt,
                                   const double start_time,
                                   const double supporting_time,

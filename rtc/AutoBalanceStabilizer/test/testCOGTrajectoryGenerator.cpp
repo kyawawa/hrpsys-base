@@ -91,13 +91,14 @@ void testFootGuidedRunning()
     cogacc_list.resize(_max_count);
     time_list.resize(_max_count);
 
+    const hrp::Vector3 target_cp_offset(0.2, 0, 0);
     std::vector<hrp::Vector3> landing_points;
     std::vector<size_t> landing_counts;
     std::vector<size_t> supporting_counts;
 
     const hrp::Vector3 _init_cog = hrp::Vector3(0, 0.1, 0.8); // Start from left kicking
-    // hrp::Vector3 one_step(0.3, -0.2, 0.0);
-    hrp::Vector3 one_step(0.525, -0.2, 0.0);
+    hrp::Vector3 one_step(0.56, -0.2, 0.0);
+    // hrp::Vector3 one_step(0.525, -0.2, 0.0);
 
     landing_points.emplace_back(_init_cog[0], _init_cog[1], 0);
     landing_counts.push_back(0);
@@ -130,6 +131,7 @@ void testFootGuidedRunning()
 
         cog_traj_gen.calcCogFromLandingPoints(landing_points[cur_idx],
                                               landing_points[cur_idx + 1],
+                                              target_cp_offset,
                                               // _init_cog,
                                               dt,
                                               landing_counts[cur_idx] * dt,

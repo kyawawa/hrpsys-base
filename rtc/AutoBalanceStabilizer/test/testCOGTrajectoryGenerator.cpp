@@ -74,7 +74,17 @@ void testPreviewController()
 
 void testFootGuidedRunning()
 {
-    constexpr double _max_time = 4.0;
+    // 0.5[s] for one step, including supporting time 0.2[s]
+    // constexpr double step_time = 1.0;
+    // constexpr double support_time = 0.7;
+    constexpr double support_time = 0.235;
+    constexpr double step_time = support_time + 0.080;
+    // constexpr double step_time = 1.5;
+    // constexpr double support_time = 0.5;
+    constexpr size_t step_count = static_cast<size_t>(std::round(step_time / dt));
+    constexpr size_t support_count = static_cast<size_t>(std::round(support_time / dt));
+
+    constexpr double _max_time = step_time * 10;
     constexpr size_t _max_count = static_cast<size_t>(std::round(_max_time / dt));
     cog_list.resize(_max_count);
     cogvel_list.resize(_max_count);
@@ -88,14 +98,6 @@ void testFootGuidedRunning()
     const hrp::Vector3 _init_cog = hrp::Vector3(0, 0.1, 0.8); // Start from left kicking
     // hrp::Vector3 one_step(0.3, -0.2, 0.0);
     hrp::Vector3 one_step(0.525, -0.2, 0.0);
-
-    // 0.5[s] for one step, including supporting time 0.2[s]
-    // constexpr double step_time = 1.0;
-    // constexpr double support_time = 0.7;
-    constexpr double step_time = 0.235 + 0.080;
-    constexpr double support_time = 0.235;
-    constexpr size_t step_count = static_cast<size_t>(std::round(step_time / dt));
-    constexpr size_t support_count = static_cast<size_t>(std::round(support_time / dt));
 
     landing_points.emplace_back(_init_cog[0], _init_cog[1], 0);
     landing_counts.push_back(0);
@@ -137,8 +139,8 @@ void testFootGuidedRunning()
 
         constexpr double g_acc = 9.80665;
         constexpr double omega = std::sqrt(g_acc / 0.8);
-        cog_list[i] = cog_traj_gen.getCog() + cog_traj_gen.getCogVel() / omega; // CP
-        // cog_list[i]    = cog_traj_gen.getCog();
+        // cog_list[i] = cog_traj_gen.getCog() + cog_traj_gen.getCogVel() / omega; // CP
+        cog_list[i]    = cog_traj_gen.getCog();
         cogvel_list[i] = cog_traj_gen.getCogVel();
         cogacc_list[i] = cog_traj_gen.getCogAcc();
         time_list[i]   = cur_time;
